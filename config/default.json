@@ -1,5 +1,5 @@
 {
-    // "mongoURI": "",
+    "mongoURI": "mongodb://localhost:27017/planteria",
     "jwtSecret": "crackItIfYouCan"
 }
   
