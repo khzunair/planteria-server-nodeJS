@@ -7,7 +7,7 @@ const {
   getUserDetails,
   verifyOtpAndRegister,
 } = require("../../controller/Auth/UserController");
-const auth = require("../../middleware/studentAuth");
+const auth = require("../../middleware/userAuth");
 
 const router = express.Router();
 

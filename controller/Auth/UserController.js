@@ -35,7 +35,7 @@ const registerUser = async (req, res) => {
 
     // Generate  OTP
     const otpCode = Math.floor(10000 + Math.random() * 90000);
-    console.log("Temp User Data:", { name, email, password, role: "user" });
+    // console.log("Temp User Data:", { name, email, password, role: "user" });
 
     // Create and save OTP entry
     const otpEntry = new Otp({
@@ -52,10 +52,10 @@ const registerUser = async (req, res) => {
       },
     });
 
-    console.log("OTP Entry before saving:", otpEntry);
+    // console.log("OTP Entry before saving:", otpEntry);
 
     const savedOtpEntry = await otpEntry.save();
-    console.log("OTP Entry saved:", savedOtpEntry);
+    // console.log("OTP Entry saved:", savedOtpEntry);
 
     // Send OTP email
     const subject = "Your Planteria OTP";
@@ -90,16 +90,16 @@ const verifyOtpAndRegister = async (req, res) => {
     }
 
     if (!otpEntry.temp_user_data) {
-      console.log("No temporary user data found in OTP entry");
+      // console.log("No temporary user data found in OTP entry");
       return res
         .status(400)
         .json({ errors: [{ msg: "No temporary user data found" }] });
     }
 
-    console.log(
-      "Temp User Data retrieved from OTP entry:",
-      otpEntry.temp_user_data
-    );
+    // console.log(
+    //   "Temp User Data retrieved from OTP entry:",
+    //   otpEntry.temp_user_data
+    // );
 
     const { name, password, role } = otpEntry.temp_user_data;
 
@@ -157,8 +157,8 @@ const loginUser = async (req, res) => {
         .json({ errors: [{ msg: "User is not active. Contact admin." }] });
     }
 
-    console.log("User password from DB:", user.password);
-    console.log("Provided password:", password);
+    // console.log("User password from DB:", user.password);
+    // console.log("Provided password:", password);
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
