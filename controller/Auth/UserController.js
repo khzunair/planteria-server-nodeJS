@@ -33,9 +33,11 @@ const registerUser = async (req, res) => {
         .json({ errors: [{ msg: "Email already registered" }] });
     }
 
-    // Generate  OTP
+    // Generate OTP
     const otpCode = Math.floor(10000 + Math.random() * 90000);
-    // console.log("Temp User Data:", { name, email, password, role: "user" });
+
+    // Hash the password before saving
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create and save OTP entry
     const otpEntry = new Otp({
@@ -47,15 +49,12 @@ const registerUser = async (req, res) => {
       temp_user_data: {
         name,
         email,
-        password,
+        password: hashedPassword, // Save hashed password
         role: roleObj._id,
       },
     });
 
-    // console.log("OTP Entry before saving:", otpEntry);
-
     const savedOtpEntry = await otpEntry.save();
-    // console.log("OTP Entry saved:", savedOtpEntry);
 
     // Send OTP email
     const subject = "Your Planteria OTP";
@@ -71,14 +70,13 @@ const registerUser = async (req, res) => {
   }
 };
 
-//VerifyOTP & Registered
+// verifyOtp And Registered
 const verifyOtpAndRegister = async (req, res) => {
   const { email, otp_code } = req.body;
 
   try {
     const otpEntry = await Otp.findOne({ email, otp_code, status: "active" });
 
-    // Check if the OTP is valid and active
     if (!otpEntry) {
       return res
         .status(400)
@@ -89,27 +87,21 @@ const verifyOtpAndRegister = async (req, res) => {
       return res.status(400).json({ errors: [{ msg: "OTP has expired" }] });
     }
 
+    // Ensure that temporary user data exists in the OTP entry
     if (!otpEntry.temp_user_data) {
-      // console.log("No temporary user data found in OTP entry");
       return res
         .status(400)
         .json({ errors: [{ msg: "No temporary user data found" }] });
     }
 
-    // console.log(
-    //   "Temp User Data retrieved from OTP entry:",
-    //   otpEntry.temp_user_data
-    // );
-
+    // Extract temporary user data from the OTP entry
     const { name, password, role } = otpEntry.temp_user_data;
 
-    // Validate the role
     const roleObj = await Role.findOne({ _id: role });
     if (!roleObj) {
       return res.status(400).json({ errors: [{ msg: "Invalid role" }] });
     }
 
-    // Create new user
     const user = new User({
       name,
       email,
@@ -120,18 +112,21 @@ const verifyOtpAndRegister = async (req, res) => {
 
     await user.save();
 
-    // Mark OTP as inactive to prevent reuse
+    // OTP  inactive to prevent reuse
     otpEntry.status = "inactive";
-    await otpEntry.save();
 
-    // Send a welcome email to the user
+    //  update the OTP entry
+    await Otp.updateOne(
+      { _id: otpEntry._id },
+      { $unset: { temp_user_data: "" } }
+    );
+
     const subject = "Welcome to Planteria!";
     const text = `Hello ${name},\n\nWelcome to Planteria! Your account has been successfully created.`;
     await sendEmail(email, subject, text);
 
     res.status(201).json({ msg: "User registered successfully" });
   } catch (err) {
-    console.error("Error during OTP verification:", err.message);
     res.status(500).send("Server Error");
   }
 };
