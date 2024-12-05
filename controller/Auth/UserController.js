@@ -203,10 +203,140 @@ const getUserDetails = async (req, res) => {
   }
 };
 
+// Forgot Password - Send OTP
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ errors: [{ msg: "User not found" }] });
+    }
+
+    // Generate OTP
+    const otpCode = Math.floor(10000 + Math.random() * 90000);
+
+    // Create OTP entry in the database
+    const otpEntry = new Otp({
+      email,
+      otp_code: otpCode,
+      created_at: new Date(),
+      expire_time: new Date(Date.now() + 5 * 60 * 1000), // OTP expires in 5 minutes
+      status: "active",
+    });
+
+    await otpEntry.save();
+
+    // Send OTP email
+    const subject = "Password Reset OTP";
+    const text = `Hello,\n\nYour OTP for resetting your password is: ${otpCode}. This OTP is valid for 5 minutes.`;
+    await sendEmail(email, subject, text);
+
+    // Respond with success message
+    res.status(200).json({
+      msg: "OTP sent to email. Use this OTP to reset your password.",
+      otp: process.env.NODE_ENV === "development" ? otpCode : undefined, // For development only
+    });
+
+    // Uncomment the below line if needed for debugging in the future
+    // console.log("OTP sent to email:", otpCode);
+  } catch (err) {
+    console.error("Error in forgot password:", err.message);
+    res.status(500).send("Server Error");
+  }
+};
+
+// VerifyOtp & Reset Password
+const verifyOtpAndResetPassword = async (req, res) => {
+  const { email, otp_code, new_password } = req.body;
+
+  try {
+    // Find the OTP entry in the database
+    const otpEntry = await Otp.findOne({ email, otp_code, status: "active" });
+
+    if (!otpEntry) {
+      return res
+        .status(400)
+        .json({ errors: [{ msg: "Invalid or expired OTP" }] });
+    }
+
+    // Check if OTP is expired
+    if (new Date() > otpEntry.expire_time) {
+      return res.status(400).json({ errors: [{ msg: "OTP has expired" }] });
+    }
+
+    // Hash the new password before saving
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+
+    // Find the user to update the password
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ errors: [{ msg: "User not found" }] });
+    }
+
+    // Update the user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    // Mark OTP as used (inactive)
+    otpEntry.status = "inactive";
+    await otpEntry.save();
+
+    res.status(200).json({ msg: "Password updated successfully" });
+  } catch (err) {
+    // console.error("Error in reset password:", err.message); // Commented out for future debugging
+    res.status(500).send("Server Error");
+  }
+};
+
+//Change Password
+const changePassword = async (req, res) => {
+  const { current_password, new_password, confirm_password } = req.body;
+
+  try {
+    // Check if new password and confirm password match
+    if (new_password !== confirm_password) {
+      return res
+        .status(400)
+        .json({ errors: [{ msg: "Passwords do not match" }] });
+    }
+
+    // Fetch the user from the database using the user id from JWT token (already in req.user)
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ errors: [{ msg: "User not found" }] });
+    }
+
+    // Compare the current password with the hashed password in the database
+    const isMatch = await bcrypt.compare(current_password, user.password);
+    if (!isMatch) {
+      return res
+        .status(400)
+        .json({ errors: [{ msg: "Incorrect current password" }] });
+    }
+
+    // Hash the new password before saving it
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+
+    // Update the user's password in the database
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ msg: "Password changed successfully" });
+  } catch (err) {
+    console.error("Error changing password:", err.message);
+    res.status(500).send("Server Error");
+  }
+};
+
 // Export the controllers
 module.exports = {
   registerUser,
   loginUser,
   getUserDetails,
   verifyOtpAndRegister,
+  forgotPassword,
+  verifyOtpAndResetPassword,
+  changePassword,
 };

@@ -6,6 +6,9 @@ const {
   loginUser,
   getUserDetails,
   verifyOtpAndRegister,
+  forgotPassword,
+  verifyOtpAndResetPassword,
+  changePassword,
 } = require("../../controller/Auth/UserController");
 const auth = require("../../middleware/userAuth");
 
@@ -59,8 +62,11 @@ router.get("/test-email", async (req, res) => {
 
 // Get User Details
 router.get("/details", auth, getUserDetails);
-
-// Update Password
-// router.put('/update-password', auth, updatePassword);
+//Forget Password
+router.post("/forget-Pswrd", auth, forgotPassword);
+//verifyotp -reset pswrd
+router.post("/verify-reset-Pswrd", auth, verifyOtpAndResetPassword);
+//Change Password
+router.post("/change-Pswrd", auth, changePassword);
 
 module.exports = router;
