@@ -49,6 +49,11 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+// const PORT = process.env.PORT || 5000;
+const host = process.env.HOST || '0.0.0.0';  // Default to '0.0.0.0' if not set
+const port = process.env.PORT || 5000; 
+
+app.listen(port, host, () => {
+  console.log(`Server started on http://${host}:${port}`);
+});
