@@ -8,6 +8,7 @@ const Otp = require("../../models/Otp");
 const sendEmail = require("../../utils/email");
 
 // Register User with OTP
+
 const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -31,6 +32,29 @@ const registerUser = async (req, res) => {
       return res
         .status(400)
         .json({ errors: [{ msg: "Email already registered" }] });
+    }
+
+    // Check for existing active OTP
+    const activeOtp = await Otp.findOne({
+      email,
+      status: "active",
+      expire_time: { $gt: new Date() }, // OTP is still valid
+    });
+
+    if (activeOtp) {
+      const remainingTime =
+        (new Date(activeOtp.expire_time).getTime() - Date.now()) / 1000; // in seconds
+      const remainingMinutes = Math.ceil(remainingTime / 60); // in minutes
+
+      return res.status(429).json({
+        errors: [
+          {
+            msg: `An OTP has already been sent. Please wait ${
+              remainingMinutes > 0 ? remainingMinutes : 5
+            } minutes before requesting another OTP.`,
+          },
+        ],
+      });
     }
 
     // Generate OTP
@@ -65,7 +89,7 @@ const registerUser = async (req, res) => {
       msg: "OTP sent to email. Please verify to complete registration.",
     });
   } catch (err) {
-    console.error("Error during registration:", err.message);
+    //console.error("Error during registration:", err.message);
     res.status(500).send("Server Error");
   }
 };
