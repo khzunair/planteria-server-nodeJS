@@ -1,5 +1,6 @@
 const express = require("express");
 const { check } = require("express-validator");
+const adminAuth = require("../../middleware/adminAuth");
 const {
   createApplication,
   getAllApplications,
@@ -30,14 +31,17 @@ router.post(
   createApplication
 );
 
-// GETALL application
-router.get("/get-allapp", getAllApplications);
-// GETALL Detail application(specific)
-router.get("/get-appdetail/:id", getApplicationDetails);
-// DELETE application
-router.delete("/delete-application/:id", deleteApplication);
-// Update Application Status Route (Approve/Reject)
-router.put("/update-status", updateApplicationStatus);
+// GET all applications (admin only)
+router.get("/get-allapp", adminAuth, getAllApplications);
+
+// GET single application details (admin only)
+router.get("/get-appdetail/:id", adminAuth, getApplicationDetails);
+
+// DELETE application (admin only)
+router.delete("/delete-application/:id", adminAuth, deleteApplication);
+
+// Update application status (admin only)
+router.put("/update-status", adminAuth, updateApplicationStatus);
 
 //VendorAuth Routes
 // Route to fetch all registered vendors
