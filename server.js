@@ -9,6 +9,8 @@ const userRoutes = require("./routes/api/userRoutes");
 const adminRoutes = require("./routes/api/adminRoutes");
 const applicationsRoutes = require("./routes/api/applicationRoutes");
 const productCategoryRoutes = require("./routes/api/ProductCategoryRoute");
+const productRoutes = require("./routes/api/ProductRoutes");
+
 const app = express();
 
 app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
@@ -34,6 +36,7 @@ app.use("/api/users", userRoutes); // Correct path
 app.use("/api/applications", applicationsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/product", productCategoryRoutes);
+app.use("/api/products", productRoutes);
 
 // for production
 // Serve static assets in production
