@@ -1,22 +1,21 @@
 const { validationResult } = require("express-validator");
 const Product = require("../../models/Product");
+const ProductCategory = require("../../models/ProductCategory");
 
 //<--------------- ADD PRODUCT --------------------->
+
 const addProduct = async (req, res) => {
-  // Validate request body
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
-    // Custom error format
     return res.status(400).json({
       success: false,
       msg: "Validation failed. Please provide all required fields.",
       errors: errors.array().map((error) => {
-        // Use error.path to identify the field causing the error
         const fieldName = error.path || "Unknown field";
         return {
           msg: error.msg,
-          location: `${fieldName} field`, // Dynamic field name
+          location: `${fieldName} field`,
         };
       }),
     });
@@ -25,19 +24,33 @@ const addProduct = async (req, res) => {
   const { name, description, price, category, image } = req.body;
 
   try {
+    // Convert the category name to uppercase to ensure uniformity
+    const upperCaseCategoryName = category.toUpperCase();
+
+    // Check if the category exists in the database (case-insensitive search)
+    const categoryDoc = await ProductCategory.findOne({
+      name: upperCaseCategoryName,
+    });
+
+    // If the category doesn't exist, return an error
+    if (!categoryDoc) {
+      return res.status(404).json({ msg: "Category not found" });
+    }
+
     // Create a new product
     const newProduct = new Product({
       vendor: req.vendor.id, // Vendor adding the product
       name,
       description,
       price,
-      category,
+      category: categoryDoc._id, // Use the ObjectId of the category
       image,
     });
 
-    // Save the product in the database
+    // Save the product to the database
     await newProduct.save();
 
+    // Return success response
     res.status(201).json({
       success: true,
       msg: "Product added successfully",
@@ -45,7 +58,7 @@ const addProduct = async (req, res) => {
         name: newProduct.name,
         description: newProduct.description,
         price: newProduct.price,
-        category: newProduct.category,
+        category: categoryDoc.name,
         image: newProduct.image,
       },
     });
