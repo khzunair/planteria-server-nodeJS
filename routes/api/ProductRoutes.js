@@ -6,7 +6,7 @@ const {
   getProductById,
   updateProduct,
   deleteProduct,
-} = require("../../controller/Products/ProductController");
+} = require("../../controller/Products/VendorProductController");
 const vendorAuth = require("../../middleware/vendorAuth");
 
 const router = express.Router();
