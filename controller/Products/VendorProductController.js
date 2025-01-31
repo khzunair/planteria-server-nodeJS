@@ -21,7 +21,7 @@ const addProduct = async (req, res) => {
     });
   }
 
-  const { name, description, price, category, image } = req.body;
+  const { name, description, price, category, image, tags } = req.body;
 
   try {
     // Convert the category name to uppercase to ensure uniformity
@@ -43,8 +43,9 @@ const addProduct = async (req, res) => {
       name,
       description,
       price,
-      category: categoryDoc._id, // Use the ObjectId of the category
+      category: categoryDoc._id,
       image,
+      tags: tags || [],
     });
 
     // Save the product to the database
@@ -60,6 +61,7 @@ const addProduct = async (req, res) => {
         price: newProduct.price,
         category: categoryDoc.name,
         image: newProduct.image,
+        tags: newProduct.tags, // Include tags in the response
       },
     });
   } catch (err) {
@@ -117,7 +119,7 @@ const getProductById = async (req, res) => {
 
 const updateProduct = async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, category, image } = req.body;
+  const { name, description, price, category, image, tags } = req.body;
 
   try {
     // Find product by ID
@@ -135,12 +137,13 @@ const updateProduct = async (req, res) => {
         .json({ msg: "Not authorized to update this product" });
     }
 
-    // Update the product details
+    // Update the product details, including the tags field
     product.name = name || product.name;
     product.description = description || product.description;
     product.price = price || product.price;
     product.category = category || product.category;
     product.image = image || product.image;
+    product.tags = tags || product.tags;
 
     // Save the updated product
     await product.save();
@@ -154,6 +157,7 @@ const updateProduct = async (req, res) => {
         price: product.price,
         category: product.category,
         image: product.image,
+        tags: product.tags,
       },
     });
   } catch (err) {
