@@ -10,6 +10,7 @@ const adminRoutes = require("./routes/api/adminRoutes");
 const applicationsRoutes = require("./routes/api/applicationRoutes");
 const productCategoryRoutes = require("./routes/api/ProductCategoryRoute");
 const productRoutes = require("./routes/api/ProductRoutes");
+const productActionsRoutes = require("./routes/api/ProductActionsRoutes");
 
 const app = express();
 
@@ -32,11 +33,13 @@ app.use(express.json({ extended: false }));
 
 // Dummy Route
 app.get("/", (req, res) => res.send("API Running"));
-app.use("/api/users", userRoutes); // Correct path
+// Correct  Working path
+app.use("/api/users", userRoutes);
 app.use("/api/applications", applicationsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/product", productCategoryRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/products/actions", productActionsRoutes);
 
 // for production
 // Serve static assets in production
