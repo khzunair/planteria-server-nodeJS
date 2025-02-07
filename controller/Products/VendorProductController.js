@@ -21,37 +21,33 @@ const addProduct = async (req, res) => {
     });
   }
 
-  const { name, description, price, category, image, tags } = req.body;
+  const { name, description, price, category, image, tags, quantity } =
+    req.body;
 
   try {
-    // Convert the category name to uppercase to ensure uniformity
     const upperCaseCategoryName = category.toUpperCase();
 
-    // Check if the category exists in the database (case-insensitive search)
     const categoryDoc = await ProductCategory.findOne({
       name: upperCaseCategoryName,
     });
 
-    // If the category doesn't exist, return an error
     if (!categoryDoc) {
       return res.status(404).json({ msg: "Category not found" });
     }
 
-    // Create a new product
     const newProduct = new Product({
-      vendor: req.vendor.id, // Vendor adding the product
+      vendor: req.vendor.id,
       name,
       description,
       price,
       category: categoryDoc._id,
       image,
       tags: tags || [],
+      quantity: quantity || 0, // Set the stock quantity
     });
 
-    // Save the product to the database
     await newProduct.save();
 
-    // Return success response
     res.status(201).json({
       success: true,
       msg: "Product added successfully",
@@ -61,7 +57,8 @@ const addProduct = async (req, res) => {
         price: newProduct.price,
         category: categoryDoc.name,
         image: newProduct.image,
-        tags: newProduct.tags, // Include tags in the response
+        tags: newProduct.tags,
+        quantity: newProduct.quantity, // Include quantity in the response
       },
     });
   } catch (err) {
@@ -119,31 +116,48 @@ const getProductById = async (req, res) => {
 
 const updateProduct = async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, category, image, tags } = req.body;
+  const { name, description, price, category, image, tags, quantity } =
+    req.body;
 
   try {
     // Find product by ID
     let product = await Product.findById(id);
 
-    // If product does not exist
     if (!product) {
       return res.status(404).json({ msg: "Product not found" });
     }
 
-    // Check if the vendor is authorized to update the product
+    // If category is provided, find the corresponding category ObjectId
+    let categoryId;
+    if (category) {
+      // Ensure category name is treated case-insensitively
+      const upperCaseCategoryName = category.toUpperCase();
+
+      const categoryDoc = await ProductCategory.findOne({
+        name: upperCaseCategoryName,
+      });
+
+      if (!categoryDoc) {
+        return res.status(404).json({ msg: "Category not found" });
+      }
+      categoryId = categoryDoc._id;
+    }
+
+    // Check if vendor is authorized to update the product
     if (product.vendor.toString() !== req.vendor.id) {
       return res
         .status(403)
         .json({ msg: "Not authorized to update this product" });
     }
 
-    // Update the product details, including the tags field
+    // Update fields
     product.name = name || product.name;
     product.description = description || product.description;
     product.price = price || product.price;
-    product.category = category || product.category;
+    product.category = categoryId || product.category; // Use ObjectId for category
     product.image = image || product.image;
     product.tags = tags || product.tags;
+    product.quantity = quantity || product.quantity;
 
     // Save the updated product
     await product.save();
@@ -151,14 +165,7 @@ const updateProduct = async (req, res) => {
     res.status(200).json({
       success: true,
       msg: "Product updated successfully",
-      product: {
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        category: product.category,
-        image: product.image,
-        tags: product.tags,
-      },
+      product,
     });
   } catch (err) {
     console.error("Error updating product:", err.message);

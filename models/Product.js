@@ -17,6 +17,7 @@ const ProductSchema = new mongoose.Schema(
     },
     image: { type: String, required: false }, // Image as text (URL or path)
     tags: [{ type: String }],
+    quantity: { type: Number, required: true, default: 0 }, // New field for stock/quantity
   },
   { timestamps: true }
 );
