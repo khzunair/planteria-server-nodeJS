@@ -15,8 +15,7 @@ const auth = require("../../middleware/userAuth");
 const router = express.Router();
 
 // Register
-router.post(
-  "/register",
+router.post( "/register",
   [
     check("name", "Name is required").not().isEmpty(),
     check("email", "Include a valid email").isEmail(),
@@ -31,8 +30,7 @@ router.post(
 router.post("/verify-otp", verifyOtpAndRegister);
 
 // Login
-router.post(
-  "/login",
+router.post( "/login",
   [
     check("email", "Include a valid email").isEmail(),
     check("password", "Password is required").exists(),

@@ -2,45 +2,50 @@ const { validationResult } = require("express-validator");
 const Application = require("../../models/Applications");
 const sendEmail = require("../../utils/email");
 const bcrypt = require("bcryptjs");
+const mongoose = require("mongoose");
 
 const RegisteredVendor = require("../../models/RegisteredVendors");
 
 // <-------------------Create Application ------------------------->
 
 const createApplication = async (req, res) => {
-  // Validate the request body
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  // Destructure the request body
-  const {
-    fullName,
-    businessName,
-    phone,
-    email,
-    address,
-    vendorType,
-    category,
-    coverLetter,
-  } = req.body;
-
   try {
-    // Check if the email already exists in the database
-    const existingApplication = await Application.findOne({ email });
-    if (existingApplication) {
-      // Send email notifying the user that the email is already registered
-      const subject = "Application Already Registered";
-      const text = `Hello ${fullName},\n\nYour email is already registered with us for an application. Please check your details.`;
-      await sendEmail(email, subject, text);
-
-      return res
-        .status(400)
-        .json({ errors: [{ msg: "Email is already in use" }] });
+    // Validate request body
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    // Create a new application
+    // Destructure request body
+    const {
+      fullName,
+      businessName,
+      phone,
+      email,
+      address,
+      vendorType,
+      category,
+      coverLetter,
+      profilePicture,
+      termsAccepted,
+    } = req.body;
+
+    // Check if the email already exists
+    const existingApplication = await Application.findOne({ email });
+
+    if (existingApplication) {
+      // Notify user that the email is already registered
+      const subject = "Application Already Registered";
+      const text = `Hello ${fullName},\n\nYour email is already registered for an application. Please check your details.`;
+      await sendEmail(email, subject, text);
+
+      return res.status(400).json({
+        success: false,
+        message: "Application with this email already exists",
+      });
+    }
+
+    // Create new application
     const newApplication = new Application({
       fullName,
       businessName,
@@ -50,22 +55,30 @@ const createApplication = async (req, res) => {
       vendorType,
       category,
       coverLetter,
-      termsAccepted: req.body.termsAccepted || false, // Default value if not provided
+      profilePicture: profilePicture || "", // Default to empty if not provided
+      termsAccepted: termsAccepted || false, // Default to false if not provided
+      status: "Pending", // Default application status
     });
 
-    // Save the application to the database
+    // Save to database
     await newApplication.save();
 
-    // Send email to the user confirming the successful submission of the application
+    // Notify user of successful submission
     const subject = "Application Submitted Successfully";
     const text = `Hello ${fullName},\n\nYour application has been successfully submitted. We will review it shortly and get back to you.`;
     await sendEmail(email, subject, text);
 
-    // Return a success response
-    res.status(201).json({ msg: "Application submitted successfully" });
+    return res.status(201).json({
+      success: true,
+      message: "Application submitted successfully. We'll email you shortly about the confirmation. Our team will review your application within 24 hours.",
+      data: newApplication,
+    });
   } catch (err) {
     console.error("Error submitting application:", err.message);
-    res.status(500).send("Server Error");
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error. Please try again later.",
+    });
   }
 };
 
@@ -164,34 +177,63 @@ const generateRandomPassword = () => {
 
 // <----------------------------Function to update application status (Approve/Reject)--------------------->
 const updateApplicationStatus = async (req, res) => {
+  // Validate request body
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
   const { applicationId, status } = req.body;
 
   try {
+
+    if (!(applicationId)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Application ID is required.",
+      });
+    }
+
+
+    // Check if applicationId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(applicationId)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid application ID format.",
+      });
+    }
+
+    // Check if application exists
     const application = await Application.findById(applicationId);
     if (!application) {
-      return res.status(404).json({ msg: "Application not found" });
+      return res.status(404).json({
+        success: false,
+        msg: "Application not found.",
+      });
     }
 
+    // Prevent re-approval of an already approved application
     if (application.status === "Approved") {
-      return res
-        .status(400)
-        .json({ msg: "This application is already approved" });
+      return res.status(400).json({
+        success: false,
+        msg: "This application is already approved.",
+      });
     }
 
+    // Update status
     application.status = status;
     await application.save();
 
+    // Handle rejection
     if (status === "Rejected") {
-      await sendEmail(
-        application.email,
-        "Vendor Application Rejected",
-        `Hello ${application.fullName},\n\nWe regret to inform you that your vendor application has been rejected.`
-      );
-      return res
-        .status(200)
-        .json({ msg: "Application rejected, email sent to vendor" });
+
+      return res.status(200).json({
+        success: true,
+        msg: "Application rejected, email sent to vendor.",
+      });
     }
 
+    // Handle approval
     if (status === "Approved") {
       const vendorId = await generateVendorId();
       const plainPassword = generateRandomPassword();
@@ -217,15 +259,20 @@ const updateApplicationStatus = async (req, res) => {
         `Hello ${application.fullName},\n\nYour application has been approved.\n\nYour login credentials:\nVendor ID: ${vendorId}\nPassword: ${plainPassword}\n\nPlease log in and change your password immediately.`
       );
 
-      return res
-        .status(200)
-        .json({ msg: "Application approved, credentials sent to vendor" });
+      return res.status(200).json({
+        success: true,
+        msg: "Application approved, credentials sent to vendor.",
+      });
     }
   } catch (err) {
     console.error("Error updating application status:", err.message);
-    res.status(500).send("Server Error");
+    return res.status(500).json({
+      success: false,
+      msg: "Internal Server Error. Please try again later.",
+    });
   }
 };
+
 
 module.exports = {
   createApplication,

@@ -19,14 +19,20 @@ const router = express.Router();
 router.post(
   "/create-application",
   [
-    check("fullName", "Full Name is required").not().isEmpty(),
-    check("businessName", "Business Name is required").not().isEmpty(),
-    check("phone", "Phone number is required").not().isEmpty(),
-    check("email", "Valid email is required").isEmail(),
-    check("address", "Address is required").not().isEmpty(),
-    check("vendorType", "Vendor Type is required").not().isEmpty(),
-    check("category", "Category is required").not().isEmpty(),
-    check("coverLetter", "Cover Letter is required").not().isEmpty(),
+    check("fullName").not().isEmpty().withMessage("Full Name is required."),
+    check("email").isEmail().withMessage("Valid email is required."),
+    check("phone").not().isEmpty().withMessage("Phone number is required."),
+    check("address").not().isEmpty().withMessage("Address is required."),
+    check("vendorType")
+      .isIn(["Individual", "Small Business", "Large Supplier"])
+      .withMessage("Invalid vendor type. Choose from Individual, Small Business, Large Supplier."),
+    check("category").isArray({ min: 1 }).withMessage("At least one category is required."),
+    check("coverLetter").not().isEmpty().withMessage("Cover Letter is required."),
+    check("termsAccepted")
+      .isBoolean()
+      .withMessage("Terms must be accepted.")
+      .custom((value) => value === true)
+      .withMessage("You must accept the terms to proceed."),
   ],
   createApplication
 );

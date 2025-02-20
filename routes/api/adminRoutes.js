@@ -13,6 +13,7 @@ const {
 // Admin Register
 router.post(
   "/register",
+  authAdmin,
   [
     check("name", "Name is required").not().isEmpty(),
     check("email", "Please include a valid email").isEmail(),
