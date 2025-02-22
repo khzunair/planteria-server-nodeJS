@@ -7,24 +7,34 @@ const addProduct = async (req, res) => {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
-    // Custom error format
     return res.status(400).json({
       success: false,
       msg: "Validation failed. Please provide all required fields.",
-      errors: errors.array().map((error) => {
-        // Use error.path to identify the field causing the error
-        const fieldName = error.path || "Unknown field";
-        return {
-          msg: error.msg,
-          location: `${fieldName} field`, // Dynamic field name
-        };
-      }),
+      errors: errors.array().map((error) => ({
+        msg: error.msg,
+        location: `${error.path || "Unknown field"} field`,
+      })),
     });
   }
 
   const { name, description, price, category, image } = req.body;
 
+  console.log("Vendor ID:", req.vendor.id);
+  console.log("Prod Name:", name);
+
   try {
+    // Check if product with same name exists under the same vendor
+    const existingProduct = await Product.findOne({ name, vendor: req.vendor.id });
+
+    if (existingProduct) {
+      console.log("Duplicate Product Found:", existingProduct._id, existingProduct.name);
+
+      return res.status(400).json({
+        success: false,
+        msg: "A product with this name already exists under your vendor ID.",
+      });
+    }
+
     // Create a new product
     const newProduct = new Product({
       vendor: req.vendor.id, // Vendor adding the product
@@ -38,10 +48,13 @@ const addProduct = async (req, res) => {
     // Save the product in the database
     await newProduct.save();
 
+    console.log("New Product Added:", newProduct._id, newProduct.name);
+
     res.status(201).json({
       success: true,
       msg: "Product added successfully",
       product: {
+        id: newProduct._id,
         name: newProduct.name,
         description: newProduct.description,
         price: newProduct.price,
@@ -54,6 +67,7 @@ const addProduct = async (req, res) => {
     res.status(500).json({ errors: [{ msg: "Server Error" }] });
   }
 };
+
 
 //<--------------- GET ALL PRODUCTS --------------------->
 
