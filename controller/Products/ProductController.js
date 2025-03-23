@@ -1,70 +1,86 @@
 const { validationResult } = require("express-validator");
+
+const { uploads } = require("../../config/cloudinary");
+const fs = require("fs");
 const Product = require("../../models/Product");
 
-//<--------------- ADD PRODUCT --------------------->
+
+
+// Add Product
 const addProduct = async (req, res) => {
-  // Validate request body
-  const errors = validationResult(req);
-
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      msg: "Validation failed. Please provide all required fields.",
-      errors: errors.array().map((error) => ({
-        msg: error.msg,
-        location: `${error.path || "Unknown field"} field`,
-      })),
-    });
-  }
-
-  const { name, description, price, category, image } = req.body;
-
-  console.log("Vendor ID:", req.vendor.id);
-  console.log("Prod Name:", name);
-
   try {
-    // Check if product with same name exists under the same vendor
-    const existingProduct = await Product.findOne({ name, vendor: req.vendor.id });
-
-    if (existingProduct) {
-      console.log("Duplicate Product Found:", existingProduct._id, existingProduct.name);
-
+    // Validate Request
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        msg: "A product with this name already exists under your vendor ID.",
+        msg: "Validation failed",
+        errors: errors.array().map((error) => ({
+          msg: error.msg,
+          location: `${error.path || "Unknown field"} field`,
+        })),
       });
     }
 
-    // Create a new product
+        // Extract product details
+        const { name, description, price, category, tags, quantity } = req.body;
+
+        // Prevent Duplicate Products for Vendor
+        const existingProduct = await Product.findOne({ name, vendor: req.vendor.id });
+        if (existingProduct) {
+          return res.status(400).json({
+            success: false,
+            msg: "A product with this name already exists under your vendor ID.",
+          });
+        }
+
+    // Check if file is uploaded
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        msg: "Validation failed",
+        errors: [{ msg: "Image is required", location: "image field" }],
+      });
+    }
+
+    // Upload Image to Cloudinary
+    const cloudinaryResult = await uploads(req.file.path);
+    if (!cloudinaryResult || !cloudinaryResult.url) {
+      return res.status(500).json({
+        success: false,
+        msg: "Image upload failed",
+      });
+    }
+
+    // Remove local file after upload
+    fs.unlinkSync(req.file.path);
+
+    // Save Product to DB
     const newProduct = new Product({
-      vendor: req.vendor.id, // Vendor adding the product
+      vendor: req.vendor.id,
       name,
       description,
       price,
       category,
-      image,
+      image: cloudinaryResult.url, // Cloudinary Image URL
+      tags: tags ? tags.split(",") : [],
+      quantity: quantity || 0,
     });
 
-    // Save the product in the database
     await newProduct.save();
-
-    console.log("New Product Added:", newProduct._id, newProduct.name);
 
     res.status(201).json({
       success: true,
       msg: "Product added successfully",
-      product: {
-        id: newProduct._id,
-        name: newProduct.name,
-        description: newProduct.description,
-        price: newProduct.price,
-        category: newProduct.category,
-        image: newProduct.image,
-      },
+      product: newProduct,
     });
   } catch (err) {
     console.error("Error adding product:", err.message);
-    res.status(500).json({ errors: [{ msg: "Server Error" }] });
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
   }
 };
 

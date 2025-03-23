@@ -6,21 +6,25 @@ const {
   getProductById,
   updateProduct,
   deleteProduct,
-} = require("../../controller/Products/VendorProductController");
+} = require("../../controller/Products/ProductController");
 const vendorAuth = require("../../middleware/vendorAuth");
+const { upload } = require("../../config/multer");
+
 
 const router = express.Router();
 
 // Route for vendors to add a product
+
+
 router.post(
   "/add-product",
+  vendorAuth,
+  upload.single("image"), // Image Upload Middleware
   [
-    vendorAuth,
     check("name", "Product name is required").not().isEmpty(),
     check("description", "Product description is required").not().isEmpty(),
     check("price", "Product price is required").isNumeric(),
     check("category", "Product category is required").not().isEmpty(),
-    check("image", "Product image URL is required").not().isEmpty(),
   ],
   addProduct
 );

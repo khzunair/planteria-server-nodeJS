@@ -1,49 +1,71 @@
 const { validationResult } = require("express-validator");
 const Product = require("../../models/Product");
 const ProductCategory = require("../../models/ProductCategory");
+const fs = require("fs");
+const { uploads } = require("../../config/cloudinary");
+
 
 //<--------------- ADD PRODUCT --------------------->
 
+// Add Product
 const addProduct = async (req, res) => {
-  const errors = validationResult(req);
-
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      msg: "Validation failed. Please provide all required fields.",
-      errors: errors.array().map((error) => {
-        const fieldName = error.path || "Unknown field";
-        return {
-          msg: error.msg,
-          location: `${fieldName} field`,
-        };
-      }),
-    });
-  }
-
-  const { name, description, price, category, image, tags, quantity } =
-    req.body;
-
   try {
-    const upperCaseCategoryName = category.toUpperCase();
-
-    const categoryDoc = await ProductCategory.findOne({
-      name: upperCaseCategoryName,
-    });
-
-    if (!categoryDoc) {
-      return res.status(404).json({ msg: "Category not found" });
+    // Validate Request
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        msg: "Validation failed",
+        errors: errors.array().map((error) => ({
+          msg: error.msg,
+          location: `${error.path || "Unknown field"} field`,
+        })),
+      });
     }
 
+    // Check if file is uploaded
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        msg: "Validation failed",
+        errors: [{ msg: "Image is required", location: "image field" }],
+      });
+    }
+
+    // Upload Image to Cloudinary
+    const cloudinaryResult = await uploads(req.file.path);
+    if (!cloudinaryResult || !cloudinaryResult.url) {
+      return res.status(500).json({
+        success: false,
+        msg: "Image upload failed",
+      });
+    }
+
+    // Remove local file after upload
+    fs.unlinkSync(req.file.path);
+
+    // Extract product details
+    const { name, description, price, category, tags, quantity } = req.body;
+
+    // Prevent Duplicate Products for Vendor
+    const existingProduct = await Product.findOne({ name, vendor: req.vendor.id });
+    if (existingProduct) {
+      return res.status(400).json({
+        success: false,
+        msg: "A product with this name already exists under your vendor ID.",
+      });
+    }
+
+    // Save Product to DB
     const newProduct = new Product({
       vendor: req.vendor.id,
       name,
       description,
       price,
-      category: categoryDoc._id,
-      image,
-      tags: tags || [],
-      quantity: quantity || 0, // Set the stock quantity
+      category,
+      image: cloudinaryResult.url, // Cloudinary Image URL
+      tags: tags ? tags.split(",") : [],
+      quantity: quantity || 0,
     });
 
     await newProduct.save();
@@ -51,22 +73,17 @@ const addProduct = async (req, res) => {
     res.status(201).json({
       success: true,
       msg: "Product added successfully",
-      product: {
-        name: newProduct.name,
-        description: newProduct.description,
-        price: newProduct.price,
-        category: categoryDoc.name,
-        image: newProduct.image,
-        tags: newProduct.tags,
-        quantity: newProduct.quantity, // Include quantity in the response
-      },
+      product: newProduct,
     });
   } catch (err) {
     console.error("Error adding product:", err.message);
-    res.status(500).json({ errors: [{ msg: "Server Error" }] });
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
   }
 };
-
 //<--------------- GET ALL PRODUCTS --------------------->
 
 const getAllProducts = async (req, res) => {

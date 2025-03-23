@@ -1,5 +1,8 @@
 const express = require("express");
 const bodyParser = require("body-parser");
+const ip = require("ip"); // Import IP module
+// const errorHandler = require("./middleware/errorHandler");
+
 
 // Connect Application to Database
 const connectDB = require("./config/db");
@@ -16,6 +19,7 @@ const couponsRoutes = require("./routes/api/couponsRoutes");
 
 const app = express();
 
+// app.use(errorHandler);
 app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
 app.use(bodyParser.json({ limit: "10mb" })); // to support JSON-encoded bodies
 app.use(express.json({ extended: false }));
@@ -56,9 +60,9 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // const PORT = process.env.PORT || 5000;
-const host = process.env.HOST || "0.0.0.0"; // Default to '0.0.0.0' if not set
+const host = ip.address(); // Auto-detects the system's IP
 const port = process.env.PORT || 5000;
 
 app.listen(port, host, () => {
-  console.log(`Server started on http://${host}:${port}`);
+  console.log(`✅ Server running on http://${host}:${port}`);
 });

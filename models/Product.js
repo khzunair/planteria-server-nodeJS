@@ -11,13 +11,13 @@ const ProductSchema = new mongoose.Schema(
     description: { type: String, required: true },
     price: { type: Number, required: true },
     category: {
-      type: mongoose.Schema.Types.ObjectId, // Reference to category model
+      type: mongoose.Schema.Types.ObjectId,
       ref: "ProductCategory",
       required: true,
     },
-    image: { type: String, required: false }, // Image as text (URL or path)
+    image: { type: String, required: true }, // Now required!
     tags: [{ type: String }],
-    quantity: { type: Number, required: true, default: 0 }, // New field for stock/quantity
+    quantity: { type: Number, required: true, default: 0 },
   },
   { timestamps: true }
 );

@@ -159,55 +159,58 @@ const verifyOtpAndRegister = async (req, res) => {
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ errors: [{ msg: "User not found" }] });
+      return res.status(400).json({
+        success: false,
+        message: "User not found",
+        statusCode: 400,
+        error: { field: "email", msg: "No account associated with this email" },
+      });
     }
 
     if (!user.isActive) {
-      return res
-        .status(403)
-        .json({ errors: [{ msg: "User is not active. Contact admin." }] });
+      return res.status(403).json({
+        success: false,
+        message: "User is not active. Contact admin.",
+        statusCode: 403,
+      });
     }
-
-    // console.log("User password from DB:", user.password);
-    // console.log("Provided password:", password);
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ errors: [{ msg: "Invalid credentials" }] });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid credentials",
+        statusCode: 400,
+        error: { field: "password", msg: "Incorrect password" },
+      });
     }
 
-    const payload = {
-      user: {
-        id: user.id,
-        role: user.role,
-      },
-    };
+    const payload = { user: { id: user.id, role: "user" } };
 
-    jwt.sign(
-      payload,
-      config.get("jwtSecret"),
-      { expiresIn: 360000 },
-      (err, token) => {
-        if (err) throw err;
-        res.json({
-          token,
-          user: { id: user.id, name: user.name, email: user.email },
-        });
-      }
-    );
+    jwt.sign(payload, config.get("jwtSecret"), { expiresIn: "10h" }, (err, token) => {
+      if (err) throw err;
+      res.json({
+        success: true,
+        message: "User login successful",
+        statusCode: 200,
+        token,
+        user: { id: user.id, name: user.name, email: user.email, role: "user" },
+      });
+    });
   } catch (err) {
-    console.error("Error during login:", err.message);
-    res.status(500).send("Server Error");
+    console.error("Error during user login:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      statusCode: 500,
+      error: { msg: err.message },
+    });
   }
 };
+
 
 //Get User Details
 const getUserDetails = async (req, res) => {

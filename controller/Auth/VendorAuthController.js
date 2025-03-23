@@ -21,78 +21,68 @@ const getAllRegisteredVendors = async (req, res) => {
 // <--------------------------------Vendor Login------------------------------------>
 
 const loginVendor = async (req, res) => {
-  // Validate request body
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
-
   const { email, vendorId, password } = req.body;
 
   try {
-    // Ensure at least one of email or vendorId is provided
     if (!email && !vendorId) {
       return res.status(400).json({
         success: false,
-        errors: [{ msg: "Either email or vendor ID is required." }],
+        message: "Either email or vendor ID is required.",
+        statusCode: 400,
+        error: { field: "identifier", msg: "Missing identifier" },
       });
     }
 
-    // Find vendor by email or vendorId
-    const vendor = await RegisteredVendor.findOne({
-      $or: [{ email }, { vendorId }],
-    });
+    const vendor = await RegisteredVendor.findOne({ $or: [{ email }, { vendorId }] });
 
     if (!vendor) {
       return res.status(400).json({
         success: false,
-        errors: [{ msg: "Vendor not found. Please check your credentials." }],
+        message: "Vendor not found. Please check your credentials.",
+        statusCode: 400,
+        error: { field: "identifier", msg: "Vendor not found" },
       });
     }
 
-    // Check password
     const isMatch = await bcrypt.compare(password, vendor.password);
     if (!isMatch) {
       return res.status(400).json({
         success: false,
-        errors: [{ msg: "Invalid credentials. Please try again." }],
+        message: "Invalid credentials. Please try again.",
+        statusCode: 400,
+        error: { field: "password", msg: "Incorrect password" },
       });
     }
 
-    // Generate JWT token
-    const payload = {
-      vendor: {
-        id: vendor.id,
-        vendorId: vendor.vendorId,
-      },
-    };
+    const payload = { vendor: { id: vendor.id, vendorId: vendor.vendorId, role: "vendor" } };
 
-    jwt.sign(
-      payload,
-      config.get("jwtSecret"),
-      { expiresIn: "10h" }, // Token valid for 10 hours
-      (err, token) => {
-        if (err) throw err;
-        res.json({
-          success: true,
-          token,
-          vendor: {
-            id: vendor.id,
-            fullName: vendor.fullName,
-            email: vendor.email,
-            vendorId: vendor.vendorId,
-          },
-        });
-      }
-    );
+    jwt.sign(payload, config.get("jwtSecret"), { expiresIn: "10h" }, (err, token) => {
+      if (err) throw err;
+      res.json({
+        success: true,
+        message: "Vendor login successful",
+        statusCode: 200,
+        token,
+        user: {
+          id: vendor.id,
+          name: vendor.fullName,
+          email: vendor.email,
+          vendorId: vendor.vendorId,
+          role: "vendor",
+        },
+      });
+    });
   } catch (err) {
     console.error("Error during vendor login:", err.message);
     res.status(500).json({
       success: false,
-      msg: "Internal Server Error. Please try again later.",
+      message: "Internal Server Error. Please try again later.",
+      statusCode: 500,
+      error: { msg: err.message },
     });
   }
 };
+
 
 module.exports = {
   getAllRegisteredVendors,
