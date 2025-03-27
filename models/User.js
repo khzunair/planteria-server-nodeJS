@@ -1,34 +1,42 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const userSchema = new mongoose.Schema({
-  name: {
-    type: String, // Updated type
-    required: true,
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+    password: {
+      type: String,
+      required: true,
+    },
+    phone: { type: String },
+    isActive: { type: Boolean, default: true },
+    isBanned: { type: Boolean, default: false },
+    lastLogin: { type: Date, default: Date.now },
+    walletBalance: { type: Number, default: 0 },
+    verificationStatus: {
+      type: String,
+      enum: ["Pending", "Verified", "Rejected"],
+      default: "Pending",
+    },
+    wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }], // Customer Wishlist
+    role: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Role",
+      required: true,
+    },
   },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  password: {
-    type: String,
-    required: true,
-  },
-  isActive: {
-    type: Boolean,
-    default: false,
-  },
-  lastLogin: {
-    type: Date,
-    default: Date.now,
-  },
-  role: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Role",
-    required: true,
-  },
-});
+  { timestamps: true }
+);
+
+
 
 // Hash password before saving
 // userSchema.pre('save', async function (next) {
