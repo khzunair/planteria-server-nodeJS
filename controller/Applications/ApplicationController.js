@@ -86,6 +86,7 @@ const createApplication = async (req, res) => {
 
 const getAllApplications = async (req, res) => {
   try {
+    // console.log("hello")
     // Fetch all applications from the database
     const applications = await Application.find();
 
