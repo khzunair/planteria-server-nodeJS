@@ -7,6 +7,7 @@ const {
   updatePlan,
   deletePlan,
 } = require("../../controller/BusinessPlan/planController");
+const AdminMiddleware = require("../../middleware/adminAuth");
 
 const router = express.Router();
 
@@ -22,6 +23,7 @@ router.post(
     check("chatLimit", "Chat limit must be a number").isInt({ gt: 0 }),
     check("duration", "Duration must be a number").isInt({ gt: 0 }),
   ],
+  AdminMiddleware,
   createPlan
 );
 
@@ -32,9 +34,9 @@ router.get("/get-plan", getPlans);
 router.get("/get-plan/:id", getPlanById);
 
 // Update Plan (Admin Only)
-router.put("/update-plan/:id", updatePlan);
+router.put("/update-plan/:id", AdminMiddleware, updatePlan);
 
 // Delete Plan (Admin Only)
-router.delete("/delete-plan/:id", deletePlan);
+router.delete("/delete-plan/:id", AdminMiddleware, deletePlan);
 
 module.exports = router;
