@@ -2,5 +2,3 @@
     "mongoURI": "mongodb+srv://roha:planteria123@planteria.po5zd.mongodb.net/planteria?retryWrites=true&w=majority&appName=Planteria",
     "jwtSecret": "crackItIfYouCan"
 }
-  
-

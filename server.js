@@ -15,7 +15,7 @@ const productCategoryRoutes = require("./routes/api/ProductCategoryRoute");
 const productRoutes = require("./routes/api/ProductRoutes");
 const productActionsRoutes = require("./routes/api/ProductActionsRoutes");
 const cartRoutes = require("./routes/api/cartRoutes");
-const couponsRoutes = require("./routes/api/couponsRoutes");
+// const couponsRoutes = require("./routes/api/couponsRoutes");
 
 const app = express();
 
@@ -47,7 +47,7 @@ app.use("/api/products", productCategoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/products/actions", productActionsRoutes);
 app.use("/api/cart", cartRoutes);
-app.use("/api/coupon", couponsRoutes);
+// app.use("/api/coupon", couponsRoutes);
 
 // for production
 // Serve static assets in production

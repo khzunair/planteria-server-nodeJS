@@ -23,6 +23,14 @@ const addProduct = async (req, res) => {
       });
     }
 
+    const allowedImageFormats = ["image/jpeg", "image/png", "image/webp"];
+if (!allowedImageFormats.includes(req.file.mimetype)) {
+  return res.status(400).json({
+    success: false,
+    msg: "Only JPG, PNG, and WEBP images are allowed",
+  });
+}
+
     // Check if file is uploaded
     if (!req.file) {
       return res.status(400).json({
@@ -46,6 +54,37 @@ const addProduct = async (req, res) => {
 
     // Extract product details
     const { name, description, price, category, tags, quantity } = req.body;
+
+    if (!price || isNaN(price) || price < 0) {
+      return res.status(400).json({
+        success: false,
+        msg: "Validation failed",
+        errors: [{ msg: "Price must be a positive number", location: "price field" }],
+      });
+    }
+    
+    if (quantity !== undefined && (isNaN(quantity) || quantity < 0)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Validation failed",
+        errors: [{ msg: "Quantity cannot be negative", location: "quantity field" }],
+      });
+    }
+
+    if (!name || name.trim() === "") {
+      return res.status(400).json({ success: false, msg: "Product name is required" });
+    }
+    
+    if (!description || description.trim().length < 10) {
+      return res.status(400).json({
+        success: false,
+        msg: "Product description must be at least 10 characters",
+      });
+    }
+    
+    if (!category || !mongoose.Types.ObjectId.isValid(category)) {
+      return res.status(400).json({ success: false, msg: "Invalid category ID" });
+    }
 
     // Prevent Duplicate Products for Vendor
     const existingProduct = await Product.findOne({ name, vendor: req.vendor.id });
@@ -137,6 +176,9 @@ const updateProduct = async (req, res) => {
     req.body;
 
   try {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, msg: "Invalid product ID" });
+    }
     // Find product by ID
     let product = await Product.findById(id);
 

@@ -3,10 +3,9 @@ const { validationResult } = require("express-validator");
 const { uploads } = require("../../config/cloudinary");
 const fs = require("fs");
 const Product = require("../../models/Product");
+const mongoose = require("mongoose");
 
 
-
-// Add Product
 const addProduct = async (req, res) => {
   try {
     // Validate Request
@@ -17,24 +16,33 @@ const addProduct = async (req, res) => {
         msg: "Validation failed",
         errors: errors.array().map((error) => ({
           msg: error.msg,
-          location: `${error.path || "Unknown field"} field`,
+          location: `${error.path || "Unknown field"}`,
         })),
       });
     }
 
-        // Extract product details
-        const { name, description, price, category, tags, quantity } = req.body;
+    // Extract product details
+    const { name, description, price, discountPrice, category, tags, quantity, weight } = req.body;
 
-        // Prevent Duplicate Products for Vendor
-        const existingProduct = await Product.findOne({ name, vendor: req.vendor.id });
-        if (existingProduct) {
-          return res.status(400).json({
-            success: false,
-            msg: "A product with this name already exists under your vendor ID.",
-          });
-        }
+    // Check if product weight is valid
+    if (!weight || isNaN(weight) || weight <= 0) {
+      return res.status(400).json({
+        success: false,
+        msg: "Validation failed",
+        errors: [{ msg: "Weight is required and must be a positive number", location: "weight" }],
+      });
+    }
 
-    // Check if file is uploaded
+    // Prevent Duplicate Product for Vendor
+    const existingProduct = await Product.findOne({ name, vendor: req.vendor.id });
+    if (existingProduct) {
+      return res.status(400).json({
+        success: false,
+        msg: "A product with this name already exists under your vendor ID.",
+      });
+    }
+
+    // Validate Image Upload
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -44,39 +52,49 @@ const addProduct = async (req, res) => {
     }
 
     // Upload Image to Cloudinary
-    const cloudinaryResult = await uploads(req.file.path);
-    if (!cloudinaryResult || !cloudinaryResult.url) {
-      return res.status(500).json({
-        success: false,
-        msg: "Image upload failed",
-      });
+    let imageUrl;
+    try {
+      const cloudinaryResult = await uploads(req.file.path);
+      if (!cloudinaryResult || !cloudinaryResult.url) {
+        throw new Error("Image upload failed");
+      }
+      imageUrl = cloudinaryResult.url;
+    } catch (err) {
+      console.error("Cloudinary Upload Error:", err.message);
+      return res.status(500).json({ success: false, msg: "Image upload failed" });
+    } finally {
+      // Remove file from local storage
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (err) {
+        console.error("Error deleting local file:", err.message);
+      }
     }
 
-    // Remove local file after upload
-    fs.unlinkSync(req.file.path);
-
-    // Save Product to DB
+    // Save Product to Database
     const newProduct = new Product({
       vendor: req.vendor.id,
       name,
       description,
       price,
+      discountPrice: discountPrice || null,
       category,
-      image: cloudinaryResult.url, // Cloudinary Image URL
-      tags: tags ? tags.split(",") : [],
-      quantity: quantity || 0,
+      image: imageUrl,
+      tags: tags ? tags.split(",").map((tag) => tag.trim()) : [],
+      stock: quantity || 1,
+      weight,
     });
 
     await newProduct.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       msg: "Product added successfully",
       product: newProduct,
     });
   } catch (err) {
     console.error("Error adding product:", err.message);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       msg: "Server Error",
       errors: [{ msg: err.message, location: "server" }],
@@ -85,102 +103,88 @@ const addProduct = async (req, res) => {
 };
 
 
-//<--------------- GET ALL PRODUCTS --------------------->
-
-const getAllProducts = async (req, res) => {
+// Get products by category
+const getProductsByCategory = async (req, res) => {
   try {
-    const products = await Product.find();
+    const { category } = req.params;
+    const products = await Product.find({ category });
 
-    if (products.length === 0) {
-      return res.status(404).json({ msg: "No products found." });
+    if (!products.length) {
+      return res.status(404).json({
+        success: false,
+        msg: "No products found in this category",
+      });
     }
 
-    res.status(200).json({
-      success: true,
-      products,
-    });
-  } catch (err) {
-    console.error("Error fetching products:", err.message);
-    res.status(500).json({ errors: [{ msg: "Server Error" }] });
+    res.status(200).json({ success: true, products });
+  } catch (error) {
+    res.status(500).json({ success: false, msg: "Server error", error });
   }
 };
 
-//<--------------- GET PRODUCT BY ID --------------------->
-
-const getProductById = async (req, res) => {
-  const { id } = req.params;
-
+// Get featured products
+const getFeaturedProducts = async (req, res) => {
   try {
-    // Find the product by its ID
-    const product = await Product.findById(id);
-
-    // If the product doesn't exist, return "Product not found"
-    if (!product) {
-      return res.status(404).json({ msg: "Product not found." });
+    const products = await Product.find({ isFeatured: true });
+    
+    if (!products.length) {
+      return res.status(404).json({
+        success: false,
+        msg: "No featured products available",
+      });
     }
 
-    // Return the product if found
-    res.status(200).json({
-      success: true,
-      product,
-    });
-  } catch (err) {
-    console.error("Error fetching product by ID:", err.message);
-    res.status(500).json({ errors: [{ msg: "Server Error" }] });
+    res.status(200).json({ success: true, products });
+  } catch (error) {
+    res.status(500).json({ success: false, msg: "Server error", error });
   }
 };
 
 //<--------------- UPDATE PRODUCT --------------------->
-
 const updateProduct = async (req, res) => {
-  const { id } = req.params;
-  const { name, description, price, category, image } = req.body;
-
   try {
-    // Find product by ID
+    const { id } = req.params;
+    const { name, description, price, category, stock, weight, size } = req.body;
+
     let product = await Product.findById(id);
-
-    // If product does not exist
     if (!product) {
-      return res.status(404).json({ msg: "Product not found" });
+      return res.status(404).json({ success: false, msg: "Product not found" });
     }
 
-    // Check if the vendor is authorized to update the product
-    if (product.vendor.toString() !== req.vendor.id) {
-      return res
-        .status(403)
-        .json({ msg: "Not authorized to update this product" });
+    // Handle image update if new image is uploaded
+    if (req.file) {
+      // Delete old image from Cloudinary
+      if (product.image && product.image.public_id) {
+        await cloudinary.uploader.destroy(product.image.public_id);
+      }
+      // Upload new image
+      const result = await cloudinary.uploader.upload(req.file.path);
+      product.image = {
+        url: result.secure_url,
+        public_id: result.public_id,
+      };
     }
 
-    // Update the product details
+    // Update product details
     product.name = name || product.name;
     product.description = description || product.description;
     product.price = price || product.price;
     product.category = category || product.category;
-    product.image = image || product.image;
+    product.stock = stock || product.stock;
+    product.weight = weight || product.weight;
+    product.size = size || product.size;
 
-    // Save the updated product
     await product.save();
 
-    res.status(200).json({
-      success: true,
-      msg: "Product updated successfully",
-      product: {
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        category: product.category,
-        image: product.image,
-      },
-    });
-  } catch (err) {
-    console.error("Error updating product:", err.message);
-    res.status(500).json({ errors: [{ msg: "Server Error" }] });
+    res.json({ success: true, msg: "Product updated successfully", product });
+  } catch (error) {
+    res.status(500).json({ success: false, msg: "Server Error", error: error.message });
   }
 };
 
-//<--------------- DELETE PRODUCT --------------------->
 
+
+//<--------------- DELETE PRODUCT --------------------->
 const deleteProduct = async (req, res) => {
   const { id } = req.params;
 
@@ -190,14 +194,15 @@ const deleteProduct = async (req, res) => {
 
     // If the product doesn't exist, return "Product not found"
     if (!product) {
-      return res.status(404).json({ msg: "Product not found" });
+      return res.status(404).json({ success: false, msg: "Product not found" });
     }
 
     // Check if the product's vendor ID matches the logged-in vendor's ID
     if (product.vendor.toString() !== req.vendor.id) {
-      return res
-        .status(403)
-        .json({ msg: "Not authorized to delete this product" });
+      return res.status(403).json({
+        success: false,
+        msg: "Not authorized to delete this product",
+      });
     }
 
     // Delete the product
@@ -210,9 +215,76 @@ const deleteProduct = async (req, res) => {
     });
   } catch (err) {
     console.error("Error deleting product:", err.message);
-    res.status(500).json({ errors: [{ msg: "Server Error" }] });
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
   }
 };
+
+const getAllProducts = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search = "" } = req.query;
+
+    // Define search criteria (if any)
+    const searchQuery = search
+      ? {
+          $or: [
+            { name: { $regex: search, $options: "i" } }, // Case-insensitive name search
+            { description: { $regex: search, $options: "i" } }, // Case-insensitive description search
+          ],
+        }
+      : {};
+
+    // Fetch products with pagination and search filter
+    const products = await Product.find(searchQuery)
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    // Count total products for pagination info
+    const totalProducts = await Product.countDocuments(searchQuery);
+
+    res.status(200).json({
+      success: true,
+      data: products,
+      totalProducts,
+      totalPages: Math.ceil(totalProducts / limit),
+      currentPage: parseInt(page),
+    });
+  } catch (err) {
+    console.error("Error fetching products:", err.message);
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
+  }
+};
+
+const getProductById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const product = await Product.findById(id);
+
+    // If product not found
+    if (!product) {
+      return res.status(404).json({ success: false, msg: "Product not found" });
+    }
+
+    res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    console.error("Error fetching product by ID:", err.message);
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
+  }
+};
+
+
 
 module.exports = {
   addProduct,
@@ -220,4 +292,6 @@ module.exports = {
   getProductById,
   updateProduct,
   deleteProduct,
+  getProductsByCategory,
+  getFeaturedProducts
 };

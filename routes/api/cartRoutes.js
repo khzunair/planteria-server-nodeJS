@@ -1,12 +1,7 @@
 const express = require("express");
-const {
-  addToCart,
-  getCart,
-  updateCartItem,
-  removeCartItem,
-  clearCart,
-} = require("../../controller/Cart/CartController");
+
 const auth = require("../../middleware/userAuth");
+const {addToCart} = require("../../controller/Cart/CartController");
 
 const router = express.Router();
 
@@ -14,15 +9,15 @@ const router = express.Router();
 router.post("/add-cart", auth, addToCart);
 
 // Get user's cart
-router.get("/getcart", auth, getCart);
+// router.get("/getcart", auth, getCart);
 
-// Update cart item (change quantity)
-router.put("/update-cart/:itemId", auth, updateCartItem);
+// // Update cart item (change quantity)
+// router.put("/update-cart/:itemId", auth, updateCartItem);
 
-// Remove a single item from cart
-router.delete("/remove-cart/:itemId", auth, removeCartItem);
+// // Remove a single item from cart
+// router.delete("/remove-cart/:itemId", auth, removeCartItem);
 
-// Clear entire cart
-router.delete("/clear-cart", auth, clearCart);
+// // Clear entire cart
+// router.delete("/clear-cart", auth, clearCart);
 
 module.exports = router;

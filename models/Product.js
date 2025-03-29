@@ -16,13 +16,15 @@ const ProductSchema = new mongoose.Schema(
       ref: "ProductCategory",
       required: true,
     },
-    image: { type: String, required: true }, // Now required!
+    image: { type: String, required: true },
     tags: [{ type: String }],
     stock: { type: Number, required: true, default: 1 },
+    weight: { type: Number, required: true }, // ✅ New Required Field (kg or lbs)
     rating: { type: Number, default: 0 },
     reviews: [{ user: mongoose.Schema.Types.ObjectId, rating: Number, comment: String }],
     isFeatured: { type: Boolean, default: false },
     salesCount: { type: Number, default: 0 },
+    isFeatured : { type: Boolean, default: false },
   },
   { timestamps: true }
 );

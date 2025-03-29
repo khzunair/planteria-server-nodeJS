@@ -6,6 +6,8 @@ const {
   getProductById,
   updateProduct,
   deleteProduct,
+  getFeaturedProducts,
+  getProductsByCategory,
 } = require("../../controller/Products/ProductController");
 const vendorAuth = require("../../middleware/vendorAuth");
 const { upload } = require("../../config/multer");
@@ -39,23 +41,21 @@ router.get("/get-product/:id", getProductById);
 router.patch(
   "/update-product/:id",
   vendorAuth,
+  upload.single("image"), // Image Upload Middleware
   [
     check("name", "Product name is required").optional().not().isEmpty(),
-    check("description", "Product description is required")
-      .optional()
-      .not()
-      .isEmpty(),
-    check("price", "Product price is required").optional().isNumeric(),
-    check("category", "Product category is required")
-      .optional()
-      .not()
-      .isEmpty(),
-    check("image", "Product image URL is required").optional().not().isEmpty(),
+    check("description", "Product description is required").optional().not().isEmpty(),
+    check("price", "Product price must be a number").optional().isNumeric(),
+    check("category", "Product category is required").optional().not().isEmpty(),
+    check("quantity", "Product stock must be a non-negative number").optional().isInt({ min: 0 }),
   ],
   updateProduct
 );
 
 // Route for vendors to delete a product
 router.delete("/delete-product/:id", vendorAuth, deleteProduct);
+
+router.get("/featured", getFeaturedProducts);
+router.get("/category/:categoryId", getProductsByCategory);
 
 module.exports = router;
