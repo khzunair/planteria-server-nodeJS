@@ -3,7 +3,6 @@ const bodyParser = require("body-parser");
 const ip = require("ip"); // Import IP module
 // const errorHandler = require("./middleware/errorHandler");
 
-
 // Connect Application to Database
 const connectDB = require("./config/db");
 
@@ -15,6 +14,9 @@ const productCategoryRoutes = require("./routes/api/ProductCategoryRoute");
 const productRoutes = require("./routes/api/ProductRoutes");
 const productActionsRoutes = require("./routes/api/ProductActionsRoutes");
 const cartRoutes = require("./routes/api/cartRoutes");
+const planRoutes = require("./routes/api/PlanRoutes");
+const subscriptionRoutes = require("./routes/api/subscriptionRoutes");
+const ChatRoutes = require("./routes/api/chatRoutes");
 const shipmentRoutes = require("./routes/api/shipmentRoutes");
 const checkoutRoutes = require("./routes/api/checkoutRoutes");
 const orderRoutes = require("./routes/api/orderRoutes");
@@ -50,9 +52,6 @@ app.use("/api/products", productCategoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/products/actions", productActionsRoutes);
 app.use("/api/cart", cartRoutes);
-app.use("/api/shipment", shipmentRoutes);
-app.use("/api/checkout", checkoutRoutes);
-app.use("/api/orders", orderRoutes);
 // app.use("/api/coupon", couponsRoutes);
 
 // for production

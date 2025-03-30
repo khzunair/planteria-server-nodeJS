@@ -32,11 +32,15 @@ const userSchema = new mongoose.Schema(
       ref: "Role",
       required: true,
     },
+    currentPlan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Subscription",
+      default: null,
+    },
+    remainingChats: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
-
-
 
 // Hash password before saving
 // userSchema.pre('save', async function (next) {
