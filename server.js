@@ -51,7 +51,9 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/products", productCategoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/products/actions", productActionsRoutes);
-app.use("/api/cart", cartRoutes);
+app.use("/api/shipment", shipmentRoutes);
+app.use("/api/checkout", checkoutRoutes);
+app.use("/api/orders", orderRoutes);
 // app.use("/api/coupon", couponsRoutes);
 
 // for production
