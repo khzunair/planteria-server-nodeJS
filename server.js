@@ -15,6 +15,9 @@ const productCategoryRoutes = require("./routes/api/ProductCategoryRoute");
 const productRoutes = require("./routes/api/ProductRoutes");
 const productActionsRoutes = require("./routes/api/ProductActionsRoutes");
 const cartRoutes = require("./routes/api/cartRoutes");
+const shipmentRoutes = require("./routes/api/shipmentRoutes");
+const checkoutRoutes = require("./routes/api/checkoutRoutes");
+const orderRoutes = require("./routes/api/orderRoutes");
 // const couponsRoutes = require("./routes/api/couponsRoutes");
 
 const app = express();
@@ -47,6 +50,9 @@ app.use("/api/products", productCategoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/products/actions", productActionsRoutes);
 app.use("/api/cart", cartRoutes);
+app.use("/api/shipment", shipmentRoutes);
+app.use("/api/checkout", checkoutRoutes);
+app.use("/api/orders", orderRoutes);
 // app.use("/api/coupon", couponsRoutes);
 
 // for production

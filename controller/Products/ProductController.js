@@ -143,29 +143,50 @@ const getFeaturedProducts = async (req, res) => {
 //<--------------- UPDATE PRODUCT --------------------->
 const updateProduct = async (req, res) => {
   try {
+    // ✅ Validate Request
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        msg: "Validation failed",
+        errors: errors.array().map((error) => ({
+          msg: error.msg,
+          location: `${error.path || "Unknown field"} field`,
+        })),
+      });
+    }
+
     const { id } = req.params;
     const { name, description, price, category, stock, weight, size } = req.body;
 
+    // ✅ Check if Product Exists
     let product = await Product.findById(id);
     if (!product) {
       return res.status(404).json({ success: false, msg: "Product not found" });
     }
 
-    // Handle image update if new image is uploaded
+    // ✅ Handle Image Update (If New Image is Uploaded)
     if (req.file) {
-      // Delete old image from Cloudinary
-      if (product.image && product.image.public_id) {
-        await cloudinary.uploader.destroy(product.image.public_id);
+      // ✅ Delete Old Image from Cloudinary (If Exists)
+      if (product.image) {
+        const publicId = product.image.split("/").pop().split(".")[0]; // Extract Cloudinary Public ID
+        await cloudinary.uploader.destroy(publicId);
       }
-      // Upload new image
-      const result = await cloudinary.uploader.upload(req.file.path);
-      product.image = {
-        url: result.secure_url,
-        public_id: result.public_id,
-      };
+
+      // ✅ Upload New Image to Cloudinary
+      const cloudinaryResult = await uploads(req.file.path);
+      if (!cloudinaryResult || !cloudinaryResult.url) {
+        return res.status(500).json({ success: false, msg: "Image upload failed" });
+      }
+
+      // ✅ Remove Local File After Upload
+      fs.unlinkSync(req.file.path);
+
+      // ✅ Update Product Image
+      product.image = cloudinaryResult.url;
     }
 
-    // Update product details
+    // ✅ Update Product Details
     product.name = name || product.name;
     product.description = description || product.description;
     product.price = price || product.price;
@@ -176,12 +197,20 @@ const updateProduct = async (req, res) => {
 
     await product.save();
 
-    res.json({ success: true, msg: "Product updated successfully", product });
-  } catch (error) {
-    res.status(500).json({ success: false, msg: "Server Error", error: error.message });
+    res.json({
+      success: true,
+      msg: "Product updated successfully",
+      product,
+    });
+  } catch (err) {
+    console.error("Error updating product:", err.message);
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
   }
 };
-
 
 
 //<--------------- DELETE PRODUCT --------------------->

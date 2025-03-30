@@ -13,22 +13,39 @@ const transporter = nodemailer.createTransport({
   secure: true,
 });
 
-// Function to send email
+// Function to send plain text email
 const sendEmail = async (to, subject, text) => {
   try {
-    // Send email
     const info = await transporter.sendMail({
-      from: process.env.EMAIL_USER, // Sender's email
-      to, // Recipient's email
+      from: process.env.EMAIL_USER,
+      to,
       subject,
       text,
     });
 
-    console.log("Email sent: " + info.response);
+    console.log("Text Email sent: " + info.response);
   } catch (error) {
-    console.error("Error sending email: ", error);
+    console.error("Error sending text email: ", error);
     throw new Error("Failed to send email");
   }
 };
 
-module.exports = sendEmail;
+// Function to send HTML email (Order Confirmation)
+const sendOrderConfirmationEmail = async (to, subject, htmlContent) => {
+  try {
+    const info = await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to,
+      subject,
+      html: htmlContent, // Sending HTML content
+    });
+
+    console.log("HTML Email sent: " + info.response);
+  } catch (error) {
+    console.error("Error sending HTML email:", error);
+    throw new Error("Failed to send email");
+  }
+};
+
+// Export both functions
+module.exports = { sendEmail, sendOrderConfirmationEmail };
