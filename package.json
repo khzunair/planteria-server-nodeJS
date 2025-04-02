@@ -26,6 +26,7 @@
     "nodemailer": "^6.9.16",
     "path": "^0.12.7",
     "stream": "^0.0.3",
+    "stripe": "^18.0.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

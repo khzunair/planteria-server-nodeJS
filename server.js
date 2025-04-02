@@ -1,7 +1,9 @@
+require("dotenv").config(); // Load .env variables
 const express = require("express");
 const bodyParser = require("body-parser");
 const ip = require("ip"); // Import IP module
 // const errorHandler = require("./middleware/errorHandler");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); // Initialize Stripe
 
 // Connect Application to Database
 const connectDB = require("./config/db");
@@ -54,6 +56,36 @@ app.use("/api/products/actions", productActionsRoutes);
 app.use("/api/shipment", shipmentRoutes);
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/orders", orderRoutes);
+
+
+// Stripe Payment Intent API
+app.post("/create-payment-intent", async (req, res) => {
+  try {
+    const { amount, currency } = req.body;
+
+    if (!amount) {
+      return res.status(400).json({ error: "Amount is required" });
+    }
+
+    console.log("Received payment request:", req.body);
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount * 100, // Convert to cents
+      currency: currency || "usd",
+      payment_method_types: ["card"],
+    });
+
+    console.log("Payment Intent Created:", paymentIntent);
+
+    res.json({ clientSecret: paymentIntent.client_secret });
+  } catch (error) {
+    console.error("Payment Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
 // app.use("/api/coupon", couponsRoutes);
 
 // for production

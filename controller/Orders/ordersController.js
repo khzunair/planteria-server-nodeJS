@@ -172,6 +172,111 @@ exports.createOrder = async (req, res) => {
 };
 
 
+// ✅ Update Order Status (Admin Only)
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    // Allowed order status updates
+    const validStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, msg: "Invalid order status" });
+    }
+
+    // Find and update order
+    let order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, msg: "Order not found" });
+    }
+
+    order.orderStatus = status;
+    await order.save();
+
+    // 📧 Send email notifications ONLY for "Shipped" and "Delivered"
+    if (status === "Shipped" || status === "Delivered") {
+      const emailHtml = generateOrderStatusEmail(order);
+      await sendOrderConfirmationEmail(order.email, `Your order is now ${status}`, emailHtml);
+    }
+
+    res.status(200).json({ success: true, msg: "Order status updated successfully", order });
+  } catch (error) {
+    console.error("❌ Error updating order status:", error);
+    res.status(500).json({ success: false, msg: "Internal server error", error: error.message });
+  }
+};
+
+// ✅ Generate Email Content for "Shipped" and "Delivered"
+const generateOrderStatusEmail = (order) => {
+  let emailContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+      <h2 style="color: #4CAF50;">Planteria - Order Update</h2>
+      <p>Dear <strong>${order.name}</strong>,</p>
+  `;
+
+  if (order.orderStatus === "Shipped") {
+    emailContent += `
+      <p>Your order is now <strong style="color: #FF5733;">out for delivery</strong>.</p>
+      <p>Tracking ID: <strong>${order.trackingId}</strong></p>
+      <p>You can track your order <a href="https://yourwebsite.com/track?trackingId=${order.trackingId}" style="color: #fff; background-color: #4CAF50; padding: 10px 20px; text-decoration: none; border-radius: 5px;">here</a>.</p>
+    `;
+  } else if (order.orderStatus === "Delivered") {
+    emailContent += `
+      <p>Your order has been <strong style="color: #4CAF50;">delivered</strong>! 🎉</p>
+      <p>We would love to hear your feedback. Please leave a review:</p>
+      <p><a href="https://yourwebsite.com/review?orderId=${order._id}" style="color: #fff; background-color: #FF5733; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Leave a Review</a></p>
+    `;
+  }
+
+  emailContent += `
+      <p>Thank you for shopping with Planteria!</p>
+      <p><strong>- The Planteria Team</strong></p>
+    </div>
+  `;
+
+  return emailContent;
+};
+
+// 🟢 Get Order Status & Summary
+exports.getOrderStatus = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    // Find order and populate products
+    const order = await Order.findById(orderId)
+      .populate("orderSummary.items.product", "name") // Only fetch product names
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({ success: false, msg: "Order not found" });
+    }
+
+    // Construct order summary
+    const orderSummary = {
+      items: order.orderSummary.items.map(item => ({
+        name: item.product?.name || "Unknown Product",
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      subtotal: order.orderSummary.subtotal,
+      shipping: order.orderSummary.shipment.totalShippingCost,
+      grandTotal: order.orderSummary.grandTotal,
+      trackingId: order.trackingId,
+      orderStatus: order.orderStatus,
+      estimatedDelivery: order.estimatedDelivery,
+      trackingUrl: `https://yourwebsite.com/track?orderId=${orderId}`,
+    };
+
+    return res.status(200).json({
+      success: true,
+      msg: "Order status retrieved successfully",
+      order: orderSummary,
+    });
+  } catch (error) {
+    console.error("Error fetching order status:", error);
+    res.status(500).json({ success: false, msg: "Internal server error" });
+  }
+};
 
 // 📦 Get All Orders for a User
 exports.getUserOrders = async (req, res) => {
