@@ -3,6 +3,7 @@ const { validationResult } = require("express-validator");
 const { uploads } = require("../../config/cloudinary");
 const fs = require("fs");
 const Product = require("../../models/Product");
+const Review = require("../../models/Review");
 const mongoose = require("mongoose");
 const ProductCategory = require("../../models/ProductCategory");
 
@@ -297,14 +298,25 @@ const getProductById = async (req, res) => {
   const { id } = req.params;
 
   try {
+    // Fetch product by ID
     const product = await Product.findById(id);
 
-    // If product not found
     if (!product) {
       return res.status(404).json({ success: false, msg: "Product not found" });
     }
 
-    res.status(200).json({ success: true, data: product });
+    // Fetch reviews associated with the product
+    const reviews = await Review.find({ product: id })
+      .populate("user", "name") // Populate user field with name
+      .sort({ createdAt: -1 }); // Sort by latest reviews first
+
+    res.status(200).json({
+      success: true,
+      data: {
+        product,
+        reviews,
+      },
+    });
   } catch (err) {
     console.error("Error fetching product by ID:", err.message);
     res.status(500).json({
@@ -314,7 +326,6 @@ const getProductById = async (req, res) => {
     });
   }
 };
-
 // Get products by category with a limit of 6 (for homepage)
 const getSixProductsByCategory = async (req, res) => {
   try {
