@@ -6,3 +6,4 @@ const authMiddleware = require("../../middleware/userAuth");
 router.post("/", authMiddleware, checkoutController.checkout);
 
 module.exports = router;
+  

@@ -23,8 +23,9 @@ const ProductSchema = new mongoose.Schema(
       type: Number, 
       required: true, 
     },
+    // rating is the average rating that will be updated with every review
     rating: { type: Number, default: 0 },
-    reviews: [{ user: mongoose.Schema.Types.ObjectId, rating: Number, comment: String }],
+    // reviews: [{ user: mongoose.Schema.Types.ObjectId, rating: Number, comment: String, image: String }],
     isFeatured: { type: Boolean, default: false },
     salesCount: { type: Number, default: 0 },
     isFeatured : { type: Boolean, default: false },

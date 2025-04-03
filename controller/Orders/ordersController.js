@@ -2,6 +2,8 @@ const Order = require("../../models/Order");
 const Cart = require("../../models/Cart");
 const Product = require("../../models/Product");
 const Shipment = require("../../models/Shipment");
+const Transaction = require("../../models/Transaction");
+const Review = require("../../models/Review");
 const { sendOrderConfirmationEmail } = require("../../utils/email");
 const crypto = require("crypto");
 
@@ -84,7 +86,12 @@ exports.createOrder = async (req, res) => {
         ].filter(Boolean),
       });
     }
-
+    if (req.body.paymentMethod !== "COD" && req.body.paymentMethod !== "CARD") {
+      return res.status(400).json({ success: false, msg: "Invalid payment method" });
+    }
+    // if (req.body.paymentMethod === "COD") {
+    //   return res.status(200).json({ success: true, msg: "payment method" });
+    // }
     let cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ success: false, msg: "Cart is empty" });
@@ -140,6 +147,18 @@ exports.createOrder = async (req, res) => {
     });
 
     await newOrder.save();
+
+    // soon need to add verification setup where if the payment is from card then it do validates
+    const transactionStatus = paymentMethod === "CARD" ? "Completed" : "Pending";
+
+    const newTransaction = new Transaction({
+      order: newOrder._id,
+      paymentMethod : req.body.paymentMethod,
+      amount : grandTotal,
+      status : transactionStatus
+    });
+
+    await newTransaction.save();
     await Cart.updateOne({ user: userId }, { $set: { items: [], totalAmount: 0 } });
 
     await newOrder.populate("orderSummary.items.product");
@@ -184,8 +203,8 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(400).json({ success: false, msg: "Invalid order status" });
     }
 
-    // Find and update order
-    let order = await Order.findById(orderId);
+    // Find the order
+    let order = await Order.findById(orderId).populate("orderSummary.items.product");
     if (!order) {
       return res.status(404).json({ success: false, msg: "Order not found" });
     }
@@ -193,10 +212,28 @@ exports.updateOrderStatus = async (req, res) => {
     order.orderStatus = status;
     await order.save();
 
+    // If order is delivered, create pending reviews for each product
+    if (status === "Delivered") {
+      const userId = order.userId;
+      const products = order.orderSummary.items.map(item => item.product._id);
+
+      for (const productId of products) {
+        const existingReview = await Review.findOne({ user: userId, product: productId });
+        if (!existingReview) {
+          const newReview = new Review({
+            user: userId,
+            product: productId,
+            status: "Pending", // Default status
+          });
+          await newReview.save();
+        }
+      }
+    }
+
     // 📧 Send email notifications ONLY for "Shipped" and "Delivered"
     if (status === "Shipped" || status === "Delivered") {
       const emailHtml = generateOrderStatusEmail(order);
-      await sendOrderConfirmationEmail(order.email, `Your order is now ${status}`, emailHtml);
+      await sendOrderConfirmationEmail(order.email, `Your order is now ${status}. Please leave us a review!`, emailHtml);
     }
 
     res.status(200).json({ success: true, msg: "Order status updated successfully", order });

@@ -5,7 +5,7 @@ const  userAuth  = require("../../middleware/userAuth");
 const  adminAuth  = require("../../middleware/adminAuth");
 const { createOrder, getUserOrders, updateOrderStatus, getOrderStatus } = require("../../controller/Orders/OrdersController");
 
-// ✅ Create Order (Only Users)
+// ✅ Create Order (Only Users)  
 router.post("/create", userAuth, createOrder);
 
 // Get order status (User must be authenticated)

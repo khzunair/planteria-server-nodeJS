@@ -22,6 +22,7 @@ const ChatRoutes = require("./routes/api/chatRoutes");
 const shipmentRoutes = require("./routes/api/shipmentRoutes");
 const checkoutRoutes = require("./routes/api/checkoutRoutes");
 const orderRoutes = require("./routes/api/orderRoutes");
+const reviewRoutes = require("./routes/api/reviewRoutes");
 // const couponsRoutes = require("./routes/api/couponsRoutes");
 
 const app = express();
@@ -56,6 +57,8 @@ app.use("/api/products/actions", productActionsRoutes);
 app.use("/api/shipment", shipmentRoutes);
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/cart/", cartRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 
 // Stripe Payment Intent API
@@ -71,7 +74,7 @@ app.post("/create-payment-intent", async (req, res) => {
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount * 100, // Convert to cents
-      currency: currency || "usd",
+      currency: currency || "pkr",
       payment_method_types: ["card"],
     });
 

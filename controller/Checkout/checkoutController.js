@@ -114,7 +114,7 @@ exports.checkout = async (req, res) => {
       stockIssues: stockIssues.length > 0 ? stockIssues : null,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Checkout Error:", error);
     res.status(500).json({ success: false, msg: "Server error", canOrder: false });
   }
 };
