@@ -51,7 +51,7 @@ app.get("/", (req, res) => res.send("API Running"));
 app.use("/api/users", userRoutes);
 app.use("/api/applications", applicationsRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/products", productCategoryRoutes);
+app.use("/api/productCategory", productCategoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/products/actions", productActionsRoutes);
 app.use("/api/shipment", shipmentRoutes);

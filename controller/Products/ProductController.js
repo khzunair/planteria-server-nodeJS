@@ -4,6 +4,7 @@ const { uploads } = require("../../config/cloudinary");
 const fs = require("fs");
 const Product = require("../../models/Product");
 const mongoose = require("mongoose");
+const ProductCategory = require("../../models/ProductCategory");
 
 
 const addProduct = async (req, res) => {
@@ -107,6 +108,7 @@ const addProduct = async (req, res) => {
 const getProductsByCategory = async (req, res) => {
   try {
     const { category } = req.params;
+    console.log(category)
     const products = await Product.find({ category });
 
     if (!products.length) {
@@ -313,6 +315,33 @@ const getProductById = async (req, res) => {
   }
 };
 
+// Get products by category with a limit of 6 (for homepage)
+const getSixProductsByCategory = async (req, res) => {
+  try {
+    // Fetch all categories
+    const categories = await ProductCategory.find();
+
+    // Fetch products for each category (limited to 6)
+    const categoryProducts = await Promise.all(
+      categories.map(async (category) => {
+        const products = await Product.find({ category: category._id }).limit(5);
+        return { category: category.name, products };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      categories: categoryProducts,
+    });
+  } catch (error) {
+    console.error("Error fetching products by category:", error);
+    res.status(500).json({ success: false, msg: "Server error", error });
+  }
+};
+
+
+
+
 
 
 module.exports = {
@@ -322,5 +351,6 @@ module.exports = {
   updateProduct,
   deleteProduct,
   getProductsByCategory,
-  getFeaturedProducts
+  getFeaturedProducts,
+  getSixProductsByCategory
 };

@@ -8,6 +8,7 @@ const {
   deleteProduct,
   getFeaturedProducts,
   getProductsByCategory,
+  getSixProductsByCategory,
 } = require("../../controller/Products/ProductController");
 const vendorAuth = require("../../middleware/vendorAuth");
 const { upload } = require("../../config/multer");
@@ -56,6 +57,7 @@ router.patch(
 router.delete("/delete-product/:id", vendorAuth, deleteProduct);
 
 router.get("/featured", getFeaturedProducts);
-router.get("/category/:categoryId", getProductsByCategory);
+router.get("/category/:category", getProductsByCategory);
+router.get("/products-by-category", getSixProductsByCategory);
 
 module.exports = router;
