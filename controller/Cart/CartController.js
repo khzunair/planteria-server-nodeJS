@@ -2,6 +2,7 @@ const Cart = require("../../models/Cart");
 const Product = require("../../models/Product");
 
 // Add to cart
+// Add to cart
 exports.addToCart = async (req, res) => {
   try {
     const { productId, quantity } = req.body;
@@ -40,11 +41,11 @@ exports.addToCart = async (req, res) => {
       cart.items.push({ product: productId, quantity });
     }
 
-    // Ensure cart.items contains updated quantities before calculating total
+    // Ensure cart.items contains updated product details before calculating total
     await cart.populate("items.product");
 
     cart.totalAmount = cart.items.reduce((sum, item) => {
-      const itemPrice = item.product.price; // Ensure price is fetched correctly
+      const itemPrice = item.product?.price || 0; // Ensure price is valid
       return sum + item.quantity * itemPrice;
     }, 0);
 
@@ -118,20 +119,29 @@ exports.updateCartQuantity = async (req, res) => {
   try {
     const userId = req.user.id;
     const { productId } = req.params;
-    const { quantity } = req.body; // New quantity
+    const { quantity } = req.body;
+
+    if (quantity <= 0) {
+      return res.status(400).json({ success: false, msg: "Quantity must be greater than 0." });
+    }
 
     let cart = await Cart.findOne({ user: userId });
 
-    if (!cart) return res.status(404).json({ success: false, msg: "Cart not found" });
+    if (!cart) {
+      return res.status(404).json({ success: false, msg: "Cart not found" });
+    }
 
     const itemIndex = cart.items.findIndex((item) => item.product.toString() === productId);
 
-    if (itemIndex === -1) return res.status(404).json({ success: false, msg: "Product not in cart" });
+    if (itemIndex === -1) {
+      return res.status(404).json({ success: false, msg: "Product not found in cart" });
+    }
 
     const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ success: false, msg: "Product not found" });
+    if (!product) {
+      return res.status(404).json({ success: false, msg: "Product not found" });
+    }
 
-    // Validate stock availability
     if (quantity > product.stock) {
       return res.status(400).json({
         success: false,
@@ -139,12 +149,13 @@ exports.updateCartQuantity = async (req, res) => {
       });
     }
 
-    // Update the quantity of the product in the cart
     cart.items[itemIndex].quantity = quantity;
 
-    // Recalculate total amount
+    // Ensure cart.items contains updated product details before calculating total
+    await cart.populate("items.product");
+
     cart.totalAmount = cart.items.reduce((sum, item) => {
-      const itemPrice = item.product.price;
+      const itemPrice = item.product?.price || 0;
       return sum + item.quantity * itemPrice;
     }, 0);
 
@@ -153,10 +164,9 @@ exports.updateCartQuantity = async (req, res) => {
     res.json({ success: true, totalAmount: cart.totalAmount, cart });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, msg: "Error updating cart quantity", error });
+    res.status(500).json({ success: false, msg: "Error updating cart quantity", error: error.message });
   }
 };
-
 
 // Clear entire cart
 exports.clearCart = async (req, res) => {
