@@ -315,25 +315,140 @@ exports.getOrderStatus = async (req, res) => {
   }
 };
 
-// 📦 Get All Orders for a User
 exports.getUserOrders = async (req, res) => {
   try {
     const userId = req.user.id;
     const { page = 1, limit = 10 } = req.query;
 
     const orders = await Order.find({ userId })
-      .sort({ createdAt: -1 })
-      .select("orderSummary.grandTotal paymentMethod createdAt")
+      .sort({ createdAt: -1 }) // Sort by latest createdAt
+      .select("trackingId orderStatus orderSummary.grandTotal orderSummary.items orderSummary.shipment createdAt")
+      .populate({
+        path: "orderSummary.items.product",
+        select: "name", // Fetch only the product name
+      })
       .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean(); // Convert Mongoose documents to plain objects
+
+    const formattedOrders = orders.map(order => ({
+      id: order._id,
+      trackingId: order.trackingId,
+      orderStatus: order.orderStatus,
+      orderDate: order.createdAt, // Include createdAt as orderDate
+      grandTotal: order.orderSummary.grandTotal,
+      shipment: {
+        shippingMethod: order.orderSummary.shipment.shippingMethod,
+        totalShippingCost: order.orderSummary.shipment.totalShippingCost,
+      },
+      products: order.orderSummary.items.map(item => ({
+        productId: item.product?._id || null,
+        name: item.product?.name || "Unknown Product",
+        quantity: item.quantity
+      }))
+    }));
 
     const totalOrders = await Order.countDocuments({ userId });
 
     res.json({
       success: true,
-      orders,
-      pagination: { totalOrders, currentPage: Number(page), totalPages: Math.ceil(totalOrders / limit) },
+      orders: formattedOrders,
+      pagination: {
+        totalOrders,
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalOrders / limit)
+      },
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+
+// ✅ Get Order by ID with Detailed Information
+exports.getOrderById = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { orderId } = req.params;
+
+    const order = await Order.findOne({ _id: orderId, userId })
+      .select("trackingId orderSummary.grandTotal orderSummary.items orderSummary.shipment paymentMethod orderStatus createdAt")
+      .populate({
+        path: "orderSummary.items.product",
+        select: "name price image"
+      })
+      .lean(); // Convert Mongoose document to plain object
+
+    if (!order) {
+      return res.status(404).json({ success: false, msg: "Order not found" });
+    }
+
+    res.json({
+      success: true,
+      order: {
+        id: order._id,
+        trackingId: order.trackingId,
+        orderDate: order.createdAt, // Renamed for consistency
+        grandTotal: order.orderSummary.grandTotal,
+        paymentMethod: order.paymentMethod,
+        status: order.orderStatus,
+        shipment: {
+          shippingMethod: order.orderSummary.shipment.shippingMethod,
+          totalShippingCost: order.orderSummary.shipment.totalShippingCost,
+        },
+        items: order.orderSummary.items.map(item => ({
+          productId: item.product?._id || null,
+          name: item.product?.name || "Unknown Product",
+          price: item.product?.price || 0,
+          quantity: item.quantity,
+          image: item.product?.image || null,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+// ✅ Get Current Orders (Orders that are not delivered yet)
+exports.getCurrentOrders = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const currentOrders = await Order.find({ userId, status: { $nin: ["Delivered", "Cancelled"] } })
+      .sort({ createdAt: -1 })
+      .select("orderSummary.grandTotal paymentMethod status createdAt");
+
+    res.json({ success: true, currentOrders });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+// ✅ Get Total Orders Count
+exports.getTotalOrders = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const totalOrders = await Order.countDocuments({ userId });
+
+    res.json({ success: true, totalOrders });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+// ✅ Get Submitted Orders (Orders that are placed but not yet shipped)
+exports.getSubmittedOrders = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const submittedOrders = await Order.find({ userId, status: "Submitted" })
+      .sort({ createdAt: -1 })
+      .select("orderSummary.grandTotal paymentMethod status createdAt");
+
+    res.json({ success: true, submittedOrders });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, msg: "Server error" });
