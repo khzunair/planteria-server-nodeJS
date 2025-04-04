@@ -1,14 +1,13 @@
 const mongoose = require("mongoose");
 
-const subscriptionSchema = new mongoose.Schema(
-  {
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // User who subscribed
-    plan: { type: mongoose.Schema.Types.ObjectId, ref: "Plan", required: true }, // Plan details
-    remainingChats: { type: Number, required: true }, // Chats left for the user
-    expiryDate: { type: Date, required: true }, // Subscription expiry date
-    isActive: { type: Boolean, default: true }, // Whether subscription is active
-  },
-  { timestamps: true }
-);
+const SubscriptionSchema = new mongoose.Schema({
+  user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  plan_id: { type: mongoose.Schema.Types.ObjectId, ref: "SubscriptionPlan", required: true },
+  purchase_date: { type: Date, default: Date.now },
+  expiry_date: { type: Date, required: true }, // Expiry date
+  remaining_scans: { type: Number, required: true },
+  remaining_chatbot_interactions: { type: Number, required: true },
+  status: { type: String, enum: ["active", "expired", "cancelled"], default: "active" }
+});
 
-module.exports = mongoose.model("Subscription", subscriptionSchema);
+module.exports = mongoose.model("Subscription", SubscriptionSchema);

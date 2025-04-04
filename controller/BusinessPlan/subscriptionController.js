@@ -1,5 +1,5 @@
 const Subscription = require("../../models/Subscription");
-const Plan = require("../../models/Plan");
+const Plan = require("../../models/SubscriptionPlan");
 const User = require("../../models/User");
 const calculateExpiry = require("../../utils/calculateExpiry"); // Import utility function
 
