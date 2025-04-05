@@ -17,6 +17,7 @@ const productRoutes = require("./routes/api/ProductRoutes");
 const productActionsRoutes = require("./routes/api/ProductActionsRoutes");
 const cartRoutes = require("./routes/api/cartRoutes");
 const planRoutes = require("./routes/api/subscriptionPlanRoutes");
+const vendorAccountRoutes = require("./routes/api/vendorAccountRoutes");
 const subscriptionRoutes = require("./routes/api/subscriptionRoutes");
 const ChatRoutes = require("./routes/api/chatRoutes");
 const shipmentRoutes = require("./routes/api/shipmentRoutes");
@@ -60,6 +61,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/cart/", cartRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/subscription-plans", planRoutes);
+app.use("/api/vendor-account", vendorAccountRoutes);
 
 
 // Stripe Payment Intent API

@@ -2,6 +2,7 @@ const Order = require("../../models/Order");
 const Cart = require("../../models/Cart");
 const Product = require("../../models/Product");
 const Shipment = require("../../models/Shipment");
+const RegisteredVendors = require("../../models/RegisteredVendors");
 const Transaction = require("../../models/Transaction");
 const Review = require("../../models/Review");
 const { sendOrderConfirmationEmail } = require("../../utils/email");
@@ -68,12 +69,19 @@ const generateOrderSummaryEmail = (order) => {
   `;
 };
 
-
 exports.createOrder = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { name, email, address, province, paymentMethod = "COD" } = req.body;
+    const {
+      name,
+      email,
+      address,
+      province,
+      paymentMethod = "COD",
+      message = ""
+    } = req.body;
 
+    // ✅ Validation
     if (!name || !email || !address || !province) {
       return res.status(400).json({
         success: false,
@@ -87,16 +95,17 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    if (paymentMethod !== "COD" && paymentMethod !== "CARD") {
+    if (!["COD", "CARD"].includes(paymentMethod)) {
       return res.status(400).json({ success: false, msg: "Invalid payment method" });
     }
 
-    let cart = await Cart.findOne({ user: userId }).populate("items.product");
+    // ✅ Fetch Cart
+    const cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ success: false, msg: "Cart is empty" });
     }
 
-    // ✅ Check if all products are from same vendor
+    // ✅ Single Vendor Check
     const vendors = new Set();
     cart.items.forEach(item => {
       if (item.product.vendor) vendors.add(item.product.vendor.toString());
@@ -109,9 +118,9 @@ exports.createOrder = async (req, res) => {
       });
     }
 
+    // ✅ Process Cart Items
     let updatedItems = [];
     let subtotal = 0;
-
 
     for (let item of cart.items) {
       const product = await Product.findById(item.product._id);
@@ -134,18 +143,21 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ success: false, msg: "No valid products available for checkout" });
     }
 
+    // ✅ Shipment Calculation
     let shipmentPlan = await Shipment.findOne({ region: province }) || await Shipment.findOne({ region: "Other Regions" });
     if (!shipmentPlan) {
       return res.status(400).json({ success: false, msg: "No shipment plan available" });
     }
 
-    let shipmentCost = shipmentPlan.fixedPrice || 500;
-    let grandTotal = subtotal + shipmentCost;
-
+    const shipmentCost = shipmentPlan.fixedPrice || 500;
+    const grandTotal = subtotal + shipmentCost;
     const trackingId = generateTrackingId();
-
     const vendorId = cart.items[0].product.vendor;
 
+    // ✅ Determine Order Status
+    const paymentStatus = paymentMethod === "CARD" ? "Paid" : "Pending";
+
+    // ✅ Create Order
     const newOrder = new Order({
       userId,
       vendor: vendorId,
@@ -154,6 +166,9 @@ exports.createOrder = async (req, res) => {
       address,
       province,
       trackingId,
+      message,
+      paymentStatus,
+      paymentMethod,
       orderSummary: {
         items: updatedItems,
         subtotal,
@@ -162,36 +177,43 @@ exports.createOrder = async (req, res) => {
           totalShippingCost: shipmentCost,
         },
         grandTotal,
-      },
-      paymentMethod,
+      }
     });
 
     await newOrder.save();
 
-    const transactionStatus = paymentMethod === "CARD" ? "Completed" : "Pending";
+    // ✅ Create Transaction
+    const platformFee = parseFloat((grandTotal * 0.20).toFixed(2));
+    const vendorEarning = grandTotal - platformFee;
+
     const newTransaction = new Transaction({
-      order: newOrder._id,
-      paymentMethod,
-      amount: grandTotal,
-      status: transactionStatus
+      orderId: newOrder._id,
+      vendorId,
+      userId,
+      subtotal: grandTotal,
+      platformFee,
+      vendorEarning,
+      status: "Pending", // Always pending at creation
+      message,
     });
 
     await newTransaction.save();
+
+    // ✅ Empty Cart
     await Cart.updateOne({ user: userId }, { $set: { items: [], totalAmount: 0 } });
 
+    // ✅ Send Email to User
     await newOrder.populate("orderSummary.items.product");
-
     const orderSummaryHtml = generateOrderSummaryEmail(newOrder);
 
-    // ✅ Send email to buyer
     try {
       await sendOrderConfirmationEmail(email, "Order Confirmation", orderSummaryHtml);
     } catch (emailError) {
       console.error("❌ Error sending email to buyer:", emailError);
     }
 
-    // ✅ Fetch vendor email and send them order confirmation
-    const vendor = await require("../../models/User").findById(vendorId);
+    // ✅ Send Email to Vendor
+    const vendor = await RegisteredVendors.findById(vendorId);
     if (vendor?.email) {
       try {
         await sendOrderConfirmationEmail(
@@ -228,59 +250,80 @@ exports.createOrder = async (req, res) => {
 };
 
 
-
-// ✅ Update Order Status (Admin Only)
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { status } = req.body;
 
-    // Allowed order status updates
     const validStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+
+    // ✅ Validate status
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ success: false, msg: "Invalid order status" });
+      return res.status(400).json({
+        success: false,
+        msg: `Invalid order status: "${status}". Allowed values: ${validStatuses.join(", ")}`,
+      });
     }
 
-    // Find the order
-    let order = await Order.findById(orderId).populate("orderSummary.items.product");
+    // ✅ Find order
+    const order = await Order.findById(orderId).populate("orderSummary.items.product");
+
     if (!order) {
       return res.status(404).json({ success: false, msg: "Order not found" });
     }
 
+    // ✅ Update order status
     order.orderStatus = status;
+
+    // ✅ If delivered and payment method is COD, update payment status to Paid
+    if (status === "Delivered" && order.paymentMethod === "COD") {
+      order.paymentStatus = "Paid";
+    }
+
     await order.save();
 
-    // If order is delivered, create pending reviews for each product
+    // ✅ Generate pending reviews only on delivery
     if (status === "Delivered") {
       const userId = order.userId;
-      const products = order.orderSummary.items.map(item => item.product._id);
+      const productIds = order.orderSummary.items.map(item => item.product._id.toString());
 
-      for (const productId of products) {
-        const existingReview = await Review.findOne({ user: userId, product: productId });
-        if (!existingReview) {
-          const newReview = new Review({
+      for (const productId of productIds) {
+        const alreadyReviewed = await Review.exists({ user: userId, product: productId });
+        if (!alreadyReviewed) {
+          await new Review({
             user: userId,
             product: productId,
-            status: "Pending", // Default status
-          });
-          await newReview.save();
+            status: "Pending",
+          }).save();
         }
       }
     }
 
-    // 📧 Send email notifications ONLY for "Shipped" and "Delivered"
-    if (status === "Shipped" || status === "Delivered") {
+    // ✅ Send email for shipped or delivered
+    if (["Shipped", "Delivered"].includes(status)) {
       const emailHtml = generateOrderStatusEmail(order);
-      await sendOrderConfirmationEmail(order.email, `Your order is now ${status}. Please leave us a review!`, emailHtml);
+      await sendOrderConfirmationEmail(
+        order.email,
+        `Your order is now ${status}`,
+        emailHtml
+      );
     }
 
-    res.status(200).json({ success: true, msg: "Order status updated successfully", order });
+    return res.status(200).json({
+      success: true,
+      msg: "Order status updated successfully",
+      order,
+    });
+
   } catch (error) {
-    console.error("❌ Error updating order status:", error);
-    res.status(500).json({ success: false, msg: "Internal server error", error: error.message });
+    console.error("❌ Error in updateOrderStatus:", error);
+    return res.status(500).json({
+      success: false,
+      msg: "Internal server error while updating order status",
+      error: error.message,
+    });
   }
 };
-
 // ✅ Generate Email Content for "Shipped" and "Delivered"
 const generateOrderStatusEmail = (order) => {
   let emailContent = `
