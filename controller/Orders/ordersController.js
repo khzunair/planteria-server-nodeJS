@@ -155,7 +155,7 @@ exports.createOrder = async (req, res) => {
     const vendorId = cart.items[0].product.vendor;
 
     // ✅ Determine Order Status
-    const paymentStatus = paymentMethod === "CARD" ? "Paid" : "Pending";
+    const paymentStatus = paymentMethod === "CARD" ? "Paid" : "Unpaid";
 
     // ✅ Create Order
     const newOrder = new Order({
@@ -254,10 +254,10 @@ exports.updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { status } = req.body;
+    const adminId = req.admin.id; // assuming you get admin from auth middleware
 
     const validStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
 
-    // ✅ Validate status
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -265,24 +265,29 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // ✅ Find order
     const order = await Order.findById(orderId).populate("orderSummary.items.product");
 
     if (!order) {
       return res.status(404).json({ success: false, msg: "Order not found" });
     }
 
-    // ✅ Update order status
+    // 🚀 Log status update before saving
+    order.statusLogs.push({
+      status,
+      updatedAt: new Date(),
+      updatedBy: adminId,
+    });
+
     order.orderStatus = status;
 
-    // ✅ If delivered and payment method is COD, update payment status to Paid
+    // 💸 Set paymentStatus to Paid if COD and Delivered
     if (status === "Delivered" && order.paymentMethod === "COD") {
       order.paymentStatus = "Paid";
     }
 
     await order.save();
 
-    // ✅ Generate pending reviews only on delivery
+    // 🌟 Generate Pending Reviews
     if (status === "Delivered") {
       const userId = order.userId;
       const productIds = order.orderSummary.items.map(item => item.product._id.toString());
@@ -299,7 +304,7 @@ exports.updateOrderStatus = async (req, res) => {
       }
     }
 
-    // ✅ Send email for shipped or delivered
+    // 📧 Send email
     if (["Shipped", "Delivered"].includes(status)) {
       const emailHtml = generateOrderStatusEmail(order);
       await sendOrderConfirmationEmail(
@@ -309,21 +314,22 @@ exports.updateOrderStatus = async (req, res) => {
       );
     }
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      msg: "Order status updated successfully",
+      msg: `Order status updated to ${status}`,
       order,
     });
 
   } catch (error) {
     console.error("❌ Error in updateOrderStatus:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       msg: "Internal server error while updating order status",
       error: error.message,
     });
   }
 };
+
 // ✅ Generate Email Content for "Shipped" and "Delivered"
 const generateOrderStatusEmail = (order) => {
   let emailContent = `

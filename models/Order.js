@@ -30,6 +30,22 @@ const OrderSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    statusLogs: [
+      {
+        status: {
+          type: String,
+          enum: ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"],
+        },
+        updatedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        updatedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User", // assuming the admin is also a User
+        },
+      }
+    ],
     trackingId: { type: String, required: true, unique: true },
     orderStatus: {
       type: String,
