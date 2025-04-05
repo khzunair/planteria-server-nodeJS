@@ -2,7 +2,6 @@ const Cart = require("../../models/Cart");
 const Product = require("../../models/Product");
 
 // Add to cart
-// Add to cart
 exports.addToCart = async (req, res) => {
   try {
     const { productId, quantity } = req.body;
@@ -10,29 +9,52 @@ exports.addToCart = async (req, res) => {
 
     let cart = await Cart.findOne({ user: userId });
 
-    if (!cart) cart = new Cart({ user: userId, items: [], totalAmount: 0 });
+    if (!cart) {
+      cart = new Cart({ user: userId, items: [], totalAmount: 0 });
+    }
 
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ success: false, msg: "Product not found" });
+    // Fetch product details along with vendor information
+    const product = await Product.findById(productId).populate("vendor");
+
+    if (!product) {
+      return res.status(404).json({ success: false, msg: "Product not found" });
+    }
+
+    // Ensure the product has a vendor
+    if (!product.vendor) {
+      return res.status(500).json({ success: false, msg: "Product vendor information is missing." });
+    }
+
+    // Check if the cart already has products from a different vendor
+    if (cart.items.length > 0) {
+      const existingVendorId = cart.items[0].product.vendor?.toString(); // Safety check
+      if (existingVendorId && existingVendorId !== product.vendor._id.toString()) {
+        return res.status(400).json({
+          success: false,
+          msg: "You are adding a product from a different store. Please remove existing items to proceed.",
+        });
+      }
+    }
 
     // Validate stock availability
     if (quantity > product.stock) {
       return res.status(400).json({
         success: false,
-        msg: `Only ${product.stock} units of ${product.name} are available in stock`,
+        msg: `Only ${product.stock} units of ${product.name} are available in stock.`,
       });
     }
 
+    // Check if the product is already in the cart
     const itemIndex = cart.items.findIndex((item) => item.product.toString() === productId);
 
     if (itemIndex > -1) {
       const updatedQuantity = cart.items[itemIndex].quantity + quantity;
 
-      // Ensure the updated quantity does not exceed stock
+      // Ensure updated quantity does not exceed stock
       if (updatedQuantity > product.stock) {
         return res.status(400).json({
           success: false,
-          msg: `Only ${product.stock} units of ${product.name} are available in stock`,
+          msg: `Only ${product.stock} units of ${product.name} are available in stock.`,
         });
       }
 
@@ -41,7 +63,7 @@ exports.addToCart = async (req, res) => {
       cart.items.push({ product: productId, quantity });
     }
 
-    // Ensure cart.items contains updated product details before calculating total
+    // Populate cart items before calculating total
     await cart.populate("items.product");
 
     cart.totalAmount = cart.items.reduce((sum, item) => {
@@ -53,10 +75,11 @@ exports.addToCart = async (req, res) => {
 
     res.json({ success: true, totalAmount: cart.totalAmount, cart });
   } catch (error) {
-    console.error(error);
+    console.error("Error adding to cart:", error);
     res.status(500).json({ success: false, msg: "Error adding to cart", error });
   }
 };
+
 
 exports.getCart = async (req, res) => {
   try {

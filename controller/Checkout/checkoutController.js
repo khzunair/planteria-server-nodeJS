@@ -17,12 +17,13 @@ exports.checkout = async (req, res) => {
     let updatedItems = [];
     let stockIssues = [];
     let subtotal = 0;
+    let uniqueVendors = new Set();
 
     // Fetch all product details at once
     const productIds = cart.items.map(item => item.product?._id);
-    const products = await Product.find({ _id: { $in: productIds } });
+    const products = await Product.find({ _id: { $in: productIds } }).populate("vendor");
 
-    // Create a map for quick lookup
+    // Create a product map for quick lookup
     const productMap = new Map(products.map(p => [p._id.toString(), p]));
 
     for (let item of cart.items) {
@@ -32,6 +33,15 @@ exports.checkout = async (req, res) => {
         stockIssues.push({ productId: item.product?._id, msg: "Product no longer available" });
         continue;
       }
+
+      if (!product.vendor) {
+        return res.status(500).json({
+          success: false,
+          msg: `Product ${product.name} has no assigned vendor. Please contact support.`,
+        });
+      }
+
+      uniqueVendors.add(product.vendor._id.toString());
 
       if (product.stock === 0) {
         stockIssues.push({ productId: product._id, name: product.name, msg: "Out of stock" });
@@ -46,6 +56,15 @@ exports.checkout = async (req, res) => {
       // Update price and subtotal
       subtotal += item.quantity * product.price;
       updatedItems.push({ product: product._id, quantity: item.quantity, weight: product.weight });
+    }
+
+    // ✅ **Enforce Single Vendor Policy**
+    if (uniqueVendors.size > 1) {
+      return res.status(400).json({
+        success: false,
+        msg: "All products in your cart must be from the same vendor. Please remove items from different stores.",
+        canOrder: false,
+      });
     }
 
     // Round subtotal

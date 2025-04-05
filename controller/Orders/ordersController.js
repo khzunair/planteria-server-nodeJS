@@ -68,7 +68,7 @@ const generateOrderSummaryEmail = (order) => {
   `;
 };
 
-// Create Order (COD Implementation)
+
 exports.createOrder = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -86,26 +86,43 @@ exports.createOrder = async (req, res) => {
         ].filter(Boolean),
       });
     }
-    if (req.body.paymentMethod !== "COD" && req.body.paymentMethod !== "CARD") {
+
+    if (paymentMethod !== "COD" && paymentMethod !== "CARD") {
       return res.status(400).json({ success: false, msg: "Invalid payment method" });
     }
-    // if (req.body.paymentMethod === "COD") {
-    //   return res.status(200).json({ success: true, msg: "payment method" });
-    // }
+
     let cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ success: false, msg: "Cart is empty" });
     }
 
+    // ✅ Check if all products are from same vendor
+    const vendors = new Set();
+    cart.items.forEach(item => {
+      if (item.product.vendor) vendors.add(item.product.vendor.toString());
+    });
+
+    if (vendors.size > 1) {
+      return res.status(400).json({
+        success: false,
+        msg: "All products in the cart must be from the same vendor to place an order.",
+      });
+    }
+
     let updatedItems = [];
     let subtotal = 0;
+
+
     for (let item of cart.items) {
       const product = await Product.findById(item.product._id);
       if (!product || product.stock < item.quantity) continue;
+
       product.stock -= item.quantity;
       product.salesCount += item.quantity;
       await product.save();
+
       subtotal += item.quantity * product.price;
+
       updatedItems.push({
         product: product._id,
         quantity: item.quantity,
@@ -122,18 +139,21 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ success: false, msg: "No shipment plan available" });
     }
 
-    let shipmentCost = shipmentPlan.fixedPrice || 500; // Default shipping cost
+    let shipmentCost = shipmentPlan.fixedPrice || 500;
     let grandTotal = subtotal + shipmentCost;
 
-    const orderTrackingId = generateTrackingId();
+    const trackingId = generateTrackingId();
+
+    const vendorId = cart.items[0].product.vendor;
 
     const newOrder = new Order({
       userId,
+      vendor: vendorId,
       name,
       email,
       address,
       province,
-      trackingId: orderTrackingId,  // ✅ FIXED: Correctly Assigning Tracking ID
+      trackingId,
       orderSummary: {
         items: updatedItems,
         subtotal,
@@ -148,14 +168,12 @@ exports.createOrder = async (req, res) => {
 
     await newOrder.save();
 
-    // soon need to add verification setup where if the payment is from card then it do validates
     const transactionStatus = paymentMethod === "CARD" ? "Completed" : "Pending";
-
     const newTransaction = new Transaction({
       order: newOrder._id,
-      paymentMethod : req.body.paymentMethod,
-      amount : grandTotal,
-      status : transactionStatus
+      paymentMethod,
+      amount: grandTotal,
+      status: transactionStatus
     });
 
     await newTransaction.save();
@@ -163,23 +181,42 @@ exports.createOrder = async (req, res) => {
 
     await newOrder.populate("orderSummary.items.product");
 
-    // ✅ FIXED: Logging before sending email
-    console.log("✅ Order Created Successfully:", newOrder);
-    console.log("✅ Tracking ID Before Sending Email:", newOrder.trackingId);
+    const orderSummaryHtml = generateOrderSummaryEmail(newOrder);
 
-    const orderSummaryEmail = generateOrderSummaryEmail(newOrder);
-
+    // ✅ Send email to buyer
     try {
-      await sendOrderConfirmationEmail(email, "Order Confirmation", orderSummaryEmail);
+      await sendOrderConfirmationEmail(email, "Order Confirmation", orderSummaryHtml);
     } catch (emailError) {
-      console.error("❌ Error sending email:", emailError);
+      console.error("❌ Error sending email to buyer:", emailError);
+    }
+
+    // ✅ Fetch vendor email and send them order confirmation
+    const vendor = await require("../../models/User").findById(vendorId);
+    if (vendor?.email) {
+      try {
+        await sendOrderConfirmationEmail(
+          vendor.email,
+          "New Order Received - Planteria",
+          `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
+            <h2 style="color: #2196F3;">New Order Alert</h2>
+            <p>Hello <strong>${vendor.name || "Vendor"}</strong>,</p>
+            <p>You have received a new order. Here are the details:</p>
+            ${orderSummaryHtml}
+          </div>
+          `
+        );
+      } catch (vendorEmailError) {
+        console.error("❌ Error sending email to vendor:", vendorEmailError);
+      }
     }
 
     res.status(201).json({
       success: true,
-      msg: "Order placed successfully. Confirmation email sent.",
+      msg: "Order placed successfully. Confirmation emails sent.",
       order: newOrder,
     });
+
   } catch (error) {
     console.error("❌ Error creating order:", error);
     res.status(500).json({
@@ -189,6 +226,7 @@ exports.createOrder = async (req, res) => {
     });
   }
 };
+
 
 
 // ✅ Update Order Status (Admin Only)
@@ -366,6 +404,118 @@ exports.getUserOrders = async (req, res) => {
 };
 
 
+// GET ADMIN ALL ORDERS
+exports.getAllOrders = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+
+    const orders = await Order.find()
+      .sort({ createdAt: -1 }) // Sort by latest createdAt
+      .select("trackingId orderStatus orderSummary.grandTotal orderSummary.items orderSummary.shipment createdAt")
+      .populate({
+        path: "orderSummary.items.product",
+        select: "name", // Fetch only the product name
+      })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .lean(); // Convert Mongoose documents to plain objects
+
+    const formattedOrders = orders.map(order => ({
+      id: order._id,
+      trackingId: order.trackingId,
+      orderStatus: order.orderStatus,
+      orderDate: order.createdAt, // Include createdAt as orderDate
+      grandTotal: order.orderSummary.grandTotal,
+      shipment: {
+        shippingMethod: order.orderSummary.shipment.shippingMethod,
+        totalShippingCost: order.orderSummary.shipment.totalShippingCost,
+      },
+      products: order.orderSummary.items.map(item => ({
+        productId: item.product?._id || null,
+        name: item.product?.name || "Unknown Product",
+        quantity: item.quantity
+      }))
+    }));
+
+    const totalOrders = await Order.countDocuments();
+
+    res.json({
+      success: true,
+      orders: formattedOrders,
+      pagination: {
+        totalOrders,
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalOrders / limit)
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+exports.getOrdersByStatus = async (req, res) => {
+  try {
+    const { status } = req.params; // Get status from URL params
+    // res.json({ success: true, msg: "Status", status });
+
+    // Define allowed statuses
+    const validStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+
+    // Validate order status
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid order status. Allowed values: Pending, Processing, Shipped, Delivered, Cancelled",
+      });
+    }
+
+    // Fetch orders with the given status
+    const orders = await Order.find({ orderStatus: status })
+      .sort({ createdAt: -1 })
+      .select("trackingId orderStatus orderSummary.grandTotal orderSummary.items orderSummary.shipment createdAt")
+      .populate({
+        path: "orderSummary.items.product",
+        select: "name",
+      })
+      .lean(); // Convert Mongoose documents to plain objects
+
+    // Format the response
+    const formattedOrders = orders.map(order => ({
+      id: order._id,
+      trackingId: order.trackingId,
+      orderStatus: order.orderStatus,
+      orderDate: order.createdAt,
+      grandTotal: order.orderSummary.grandTotal,
+      shipment: {
+        shippingMethod: order.orderSummary.shipment?.shippingMethod || "N/A",
+        totalShippingCost: order.orderSummary.shipment?.totalShippingCost || 0,
+      },
+      products: order.orderSummary.items.map(item => ({
+        productId: item.product?._id || null,
+        name: item.product?.name || "Unknown Product",
+        quantity: item.quantity,
+      })),
+    }));
+
+    const totalOrders = await Order.countDocuments({ orderStatus: status });
+
+    res.json({
+      success: true,
+      orders: formattedOrders,
+      pagination: {
+        totalOrders,
+        currentPage: 1, // Just show the first page since pagination is removed
+        totalPages: 1,   // Assuming no pagination for now
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching orders by status:", error);
+    res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+
 // ✅ Get Order by ID with Detailed Information
 exports.getOrderById = async (req, res) => {
   try {
@@ -412,20 +562,113 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// ✅ Get Current Orders (Orders that are not delivered yet)
-exports.getCurrentOrders = async (req, res) => {
+// ✅ Get Order by ID with Detailed Information
+exports.getOrderByIdAdmin = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const currentOrders = await Order.find({ userId, status: { $nin: ["Delivered", "Cancelled"] } })
-      .sort({ createdAt: -1 })
-      .select("orderSummary.grandTotal paymentMethod status createdAt");
+    // const userId = req.user.id;
+    const { orderId } = req.params;
 
-    res.json({ success: true, currentOrders });
+    const order = await Order.findOne({ _id: orderId })
+      .select("trackingId orderSummary.grandTotal orderSummary.items orderSummary.shipment paymentMethod orderStatus createdAt")
+      .populate({
+        path: "orderSummary.items.product",
+        select: "name price image"
+      })
+      .lean(); // Convert Mongoose document to plain object
+
+    if (!order) {
+      return res.status(404).json({ success: false, msg: "Order not found" });
+    }
+
+    res.json({
+      success: true,
+      order: {
+        id: order._id,
+        trackingId: order.trackingId,
+        orderDate: order.createdAt, // Renamed for consistency
+        grandTotal: order.orderSummary.grandTotal,
+        paymentMethod: order.paymentMethod,
+        status: order.orderStatus,
+        shipment: {
+          shippingMethod: order.orderSummary.shipment.shippingMethod,
+          totalShippingCost: order.orderSummary.shipment.totalShippingCost,
+        },
+        items: order.orderSummary.items.map(item => ({
+          productId: item.product?._id || null,
+          name: item.product?.name || "Unknown Product",
+          price: item.product?.price || 0,
+          quantity: item.quantity,
+          image: item.product?.image || null,
+        })),
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, msg: "Server error" });
   }
 };
+
+exports.getCurrentOrders = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { page = 1, limit = 10 } = req.query;
+
+    // Fetch orders with statuses "Pending", "Processing", "Shipped"
+    const orders = await Order.find({
+      userId,
+      orderStatus: { $in: ["Pending", "Processing", "Shipped"] }
+    })
+      .sort({ createdAt: -1 }) // Sort by latest createdAt
+      .select("trackingId orderStatus orderSummary.grandTotal orderSummary.items orderSummary.shipment createdAt")
+      .populate({
+        path: "orderSummary.items.product",
+        select: "name", // Fetch only the product name
+      })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .lean(); // Convert Mongoose documents to plain objects
+
+    const formattedOrders = orders.map(order => ({
+      id: order._id,
+      trackingId: order.trackingId,
+      orderStatus: order.orderStatus,
+      orderDate: order.createdAt, // Include createdAt as orderDate
+      grandTotal: order.orderSummary.grandTotal,
+      shipment: {
+        shippingMethod: order.orderSummary.shipment?.shippingMethod || "N/A",
+        totalShippingCost: order.orderSummary.shipment?.totalShippingCost || 0,
+      },
+      products: order.orderSummary.items.map(item => ({
+        productId: item.product?._id || null,
+        name: item.product?.name || "Unknown Product",
+        quantity: item.quantity
+      }))
+    }));
+
+    // Count total orders based on applied filter (statuses "Pending", "Processing", "Shipped")
+    const totalOrders = await Order.countDocuments({
+      userId,
+      orderStatus: { $in: ["Pending", "Processing", "Shipped"] }
+    });
+
+    res.json({
+      success: true,
+      orders: formattedOrders,
+      pagination: {
+        totalOrders,
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalOrders / limit)
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching current orders:", error);
+    res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+
+
+
 
 // ✅ Get Total Orders Count
 exports.getTotalOrders = async (req, res) => {
@@ -440,17 +683,237 @@ exports.getTotalOrders = async (req, res) => {
   }
 };
 
-// ✅ Get Submitted Orders (Orders that are placed but not yet shipped)
+
+
 exports.getSubmittedOrders = async (req, res) => {
   try {
     const userId = req.user.id;
-    const submittedOrders = await Order.find({ userId, status: "Submitted" })
-      .sort({ createdAt: -1 })
-      .select("orderSummary.grandTotal paymentMethod status createdAt");
+    const { page = 1, limit = 10 } = req.query;
 
-    res.json({ success: true, submittedOrders });
+    // Fetch orders except "Delivered" and "Pending"
+    const orders = await Order.find({
+      userId,
+      orderStatus: "Delivered"
+    })
+      .sort({ createdAt: -1 }) // Sort by latest createdAt
+      .select("trackingId orderStatus orderSummary.grandTotal orderSummary.items orderSummary.shipment createdAt")
+      .populate({
+        path: "orderSummary.items.product",
+        select: "name", // Fetch only the product name
+      })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .lean(); // Convert Mongoose documents to plain objects
+
+    const formattedOrders = orders.map(order => ({
+      id: order._id,
+      trackingId: order.trackingId,
+      orderStatus: order.orderStatus,
+      orderDate: order.createdAt, // Include createdAt as orderDate
+      grandTotal: order.orderSummary.grandTotal,
+      shipment: {
+        shippingMethod: order.orderSummary.shipment.shippingMethod,
+        totalShippingCost: order.orderSummary.shipment.totalShippingCost,
+      },
+      products: order.orderSummary.items.map(item => ({
+        productId: item.product?._id || null,
+        name: item.product?.name || "Unknown Product",
+        quantity: item.quantity
+      }))
+    }));
+
+    // Count total orders based on applied filter (excluding "Delivered" & "Pending")
+    const totalOrders = await Order.countDocuments({
+      userId,
+      orderStatus: { $nin: ["Delivered", "Pending"] }
+    });
+
+    res.json({
+      success: true,
+      orders: formattedOrders,
+      pagination: {
+        totalOrders,
+        currentPage: Number(page),
+        totalPages: Math.ceil(totalOrders / limit)
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+
+exports.getAllOrdersVendor = async (req, res) => {
+  try {
+    const vendorId = req.vendor.id;
+
+    const orders = await Order.find({ vendor: vendorId })
+      .populate("userId", "name email") // buyer info
+      .populate("orderSummary.items.product", "title price") // product info
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      msg: "Orders fetched successfully",
+      orders,
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching vendor orders:", error);
+    res.status(500).json({
+      success: false,
+      msg: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+
+exports.getAllOrdersVendorForAdmin = async (req, res) => {
+  try {
+    const vendorId = req.params.vendorId;
+
+    const orders = await Order.find({ vendor: vendorId })
+      .populate("userId", "name email") // buyer info
+      .populate("orderSummary.items.product", "title price") // product info
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      msg: "Orders fetched successfully",
+      orders,
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching vendor orders:", error);
+    res.status(500).json({
+      success: false,
+      msg: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+exports.getOrderByIdVendor = async (req, res) => {
+  try {
+    const vendorId = req.vendor.id;
+    const { orderId } = req.params;
+
+    const order = await Order.findById(orderId)
+      .populate("userId", "name email")
+      .populate("orderSummary.items.product", "title price");
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        msg: "Order not found",
+      });
+    }
+
+    // ✅ Check if order belongs to the current vendor
+    if (order.vendor.toString() !== vendorId) {
+      return res.status(403).json({
+        success: false,
+        msg: "Unauthorized access. This order does not belong to you.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      msg: "Order fetched successfully",
+      order,
+    });
+
+  } catch (error) {
+    console.error("❌ Error fetching order by ID:", error);
+    res.status(500).json({
+      success: false,
+      msg: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+exports.getOrdersByStatusVendor = async (req, res) => {
+  try {
+    const vendorId = req.vendor.id;
+    const { status } = req.params;
+
+    const validStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+
+    // ✅ Validate status
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        msg: "Invalid order status",
+      });
+    }
+
+    // ✅ Find orders matching vendor & status
+    const orders = await Order.find({ vendor: vendorId, orderStatus: status })
+      .populate("userId", "name email")
+      .populate("orderSummary.items.product", "title price");
+
+    res.status(200).json({
+      success: true,
+      msg: `Orders with status '${status}' fetched successfully`,
+      count: orders.length,
+      orders,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching orders by status:", error);
+    res.status(500).json({
+      success: false,
+      msg: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
+exports.updateOrderStatusVendor = async (req, res) => {
+  try {
+    const vendorId = req.vendor.id;  // The vendor ID from the auth token
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    // Allowed order status updates
+    const validStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, msg: "Invalid order status" });
+    }
+
+    // ✅ Find the order and check if it belongs to the vendor
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ success: false, msg: "Order not found" });
+    }
+
+    if (order.vendor.toString() !== vendorId) {
+      return res.status(403).json({ success: false, msg: "You are not authorized to update this order" });
+    }
+
+    // Update order status
+    order.orderStatus = status;
+    await order.save();
+
+    // 📧 Send email notifications ONLY for "Shipped" and "Delivered"
+    if (status === "Shipped" || status === "Delivered") {
+      const emailHtml = generateOrderStatusEmail(order); // Make sure to have this email HTML generator
+      await sendOrderConfirmationEmail(order.email, `Your order is now ${status}. Please leave us a review!`, emailHtml);
+    }
+
+    res.status(200).json({
+      success: true,
+      msg: "Order status updated successfully",
+      order,
+    });
+  } catch (error) {
+    console.error("❌ Error updating order status:", error);
+    res.status(500).json({
+      success: false,
+      msg: "Internal server error",
+      error: error.message,
+    });
   }
 };
