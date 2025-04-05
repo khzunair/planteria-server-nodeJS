@@ -75,6 +75,7 @@ exports.createOrder = async (req, res) => {
     const {
       name,
       email,
+      phoneNumber, 
       address,
       province,
       paymentMethod = "COD",
@@ -82,7 +83,7 @@ exports.createOrder = async (req, res) => {
     } = req.body;
 
     // ✅ Validation
-    if (!name || !email || !address || !province) {
+    if (!name || !email || !address || !province || !phoneNumber) {
       return res.status(400).json({
         success: false,
         msg: "Validation failed",
@@ -91,6 +92,7 @@ exports.createOrder = async (req, res) => {
           !email && { msg: "Email is required", location: "body.email" },
           !address && { msg: "Address is required", location: "body.address" },
           !province && { msg: "Province is required", location: "body.province" },
+          !phoneNumber && { msg: "Phone number is required", location: "body.phoneNumber" },
         ].filter(Boolean),
       });
     }
@@ -163,6 +165,7 @@ exports.createOrder = async (req, res) => {
       vendor: vendorId,
       name,
       email,
+      phoneNumber,
       address,
       province,
       trackingId,

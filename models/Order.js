@@ -30,6 +30,17 @@ const OrderSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    phoneNumber: {
+      type: String,
+      required: true,
+      validate: {
+        validator: function (v) {
+          // Basic validation for Pakistani phone numbers (starting with 03)
+          return /^03\d{9}$/.test(v);
+        },
+        message: props => `${props.value} is not a valid phone number!`
+      }
+    },
     statusLogs: [
       {
         status: {
