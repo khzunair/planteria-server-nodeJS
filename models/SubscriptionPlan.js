@@ -5,8 +5,8 @@ const SubscriptionPlanSchema = new mongoose.Schema({
   price: { type: Number, required: true, default: 0 }, // 0 for free plan
   scans: { type: Number, required: true },
   chatbot_interactions: { type: Number, required: true },
-  validity: { type: String, required: true }, // e.g., "1 Month", "3 Months"
-  tags: { type: [String], default: [] }, // Tags like "Best Selling", "Popular"
+  validity: { type: Number, required: true }, // number of days
+  tags: { type: [String], default: [] },
   is_active: { type: Boolean, default: true },
   created_at: { type: Date, default: Date.now }
 });

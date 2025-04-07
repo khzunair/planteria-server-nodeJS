@@ -8,7 +8,7 @@ const TransactionSchema = new mongoose.Schema({
   },
   vendorId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "RegisteredVendors",
     required: true,
   },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },

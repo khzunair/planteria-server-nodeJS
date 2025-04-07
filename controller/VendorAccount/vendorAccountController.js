@@ -1,5 +1,6 @@
 const VendorAccount = require("../../models/VendorAccount");
 const RegisteredVendors = require("../../models/RegisteredVendors");
+const VendorBalance = require("../../models/VendorBalance");
 
 exports.createOrUpdateVendorAccount = async (req, res) => {
   try {
@@ -11,12 +12,10 @@ exports.createOrUpdateVendorAccount = async (req, res) => {
       return res.status(404).json({ success: false, msg: "Vendor not found" });
     }
 
-
     let account = await VendorAccount.findOne({ vendorId });
 
-
     if (account) {
-      // Update
+      // ✅ Update existing account
       account.accountTitle = accountTitle;
       account.bankName = bankName;
       account.iban = iban;
@@ -25,16 +24,16 @@ exports.createOrUpdateVendorAccount = async (req, res) => {
       account.updatedAt = Date.now();
       await account.save();
 
-      if(!vendor.bankDetailsProvided) {
-        vendor.bankDetailsProvided = true; // Update vendor's bank details status
-        await vendor.save(); // Save the vendor document
+      // ✅ Update bankDetailsProvided flag
+      if (!vendor.bankDetailsProvided) {
+        vendor.bankDetailsProvided = true;
+        await vendor.save();
       }
-      
 
       return res.status(200).json({ success: true, msg: "Bank account updated", account });
     }
 
-    // Create new
+    // ✅ Create new bank account
     const newAccount = new VendorAccount({
       vendorId,
       accountTitle,
@@ -46,8 +45,23 @@ exports.createOrUpdateVendorAccount = async (req, res) => {
 
     await newAccount.save();
 
-    vendor.bankDetailsProvided = true; // Update vendor's bank details status
-    await vendor.save(); // Save the vendor document
+    // ✅ Update bank details status
+    vendor.bankDetailsProvided = true;
+    await vendor.save();
+
+    // ✅ Create VendorBalance if not already exists
+    const existingBalance = await VendorBalance.findOne({ vendorId });
+    if (!existingBalance) {
+      const balance = new VendorBalance({
+        vendorId,
+        totalEarned: 0,
+        pending: 0,
+        paid: 0,
+        balance: 0,
+        lastPaid: null,
+      });
+      await balance.save();
+    }
 
     res.status(201).json({ success: true, msg: "Bank account created", account: newAccount });
   } catch (error) {

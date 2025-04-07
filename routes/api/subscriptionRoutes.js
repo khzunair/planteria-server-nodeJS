@@ -1,28 +1,21 @@
 const express = require("express");
-const {
-  subscribePlan,
-  renewSubscription,
-  upgradeSubscription,
-  getUserSubscription,
-  cancelSubscription,
-} = require("../../controller/BusinessPlan/subscriptionController");
-const authMiddleware = require("../../middleware/userAuth");
-
 const router = express.Router();
+const subscriptionController = require("../../controller/BusinessPlan/subscriptionController");
+const auth = require("../../middleware/userAuth"); // user authentication
 
-// Subscribe to a plan
-router.post("/subscribe-plan", authMiddleware, subscribePlan);
+// 🔹 Subscribe to a plan
+router.post("/subscribe/:planId", auth, subscriptionController.subscribeToPlan);
 
-// Renew subscription
-router.post("/renew", authMiddleware, renewSubscription);
+// 🔹 Get active subscription
+router.get("/current", auth, subscriptionController.getActiveSubscription);
 
-// Upgrade subscription
-router.post("/upgrade-subcription", authMiddleware, upgradeSubscription);
+// 🔹 Use a scan (for plant disease detection, etc.)
+router.post("/use-scan", auth, subscriptionController.useScan);
 
-// Get user subscription details
-router.get("/my-subscription", authMiddleware, getUserSubscription);
+// 🔹 Use chatbot interaction
+router.post("/use-chatbot", auth, subscriptionController.useChatbot);
 
-// Cancel Subscription
-router.delete("/cancel-subscription", authMiddleware, cancelSubscription);
+// 🔹 Get usage stats (remaining scans & interactions)
+// router.get("/usage", auth, subscriptionController.getUsageStats);
 
 module.exports = router;
