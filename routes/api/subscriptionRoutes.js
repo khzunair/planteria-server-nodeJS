@@ -15,6 +15,9 @@ router.post("/use-scan", auth, subscriptionController.useScan);
 // 🔹 Use chatbot interaction
 router.post("/use-chatbot", auth, subscriptionController.useChatbot);
 
+// POST /api/chat
+router.post("/chat", auth, subscriptionController.chatWithFlaskBot);
+
 // 🔹 Get usage stats (remaining scans & interactions)
 // router.get("/usage", auth, subscriptionController.getUsageStats);
 

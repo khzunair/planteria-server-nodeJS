@@ -1,9 +1,9 @@
-// 📁 controller/BusinessPlan/subscriptionController.js
-
 const Subscription = require("../../models/Subscription");
 const SubscriptionPlan = require("../../models/SubscriptionPlan");
 const Payment = require("../../models/Payment");
 const mongoose = require("mongoose");
+
+const axios = require("axios");
 
 // Helper to calculate expiry date
 const calculateExpiryDate = (validityInDays) => {
@@ -107,5 +107,49 @@ exports.useChatbot = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, msg: "Server error" });
+  }
+};
+
+
+// 🔹 POST /api/chat
+exports.chatWithFlaskBot = async (req, res) => {
+  const { message, chatHistory } = req.body;
+
+  // 🔸 Validate request body
+  if (!message || typeof message !== "string") {
+    return res.status(400).json({
+      success: false,
+      msg: "'message' is required and must be a string.",
+    });
+  }
+
+  if (!Array.isArray(chatHistory)) {
+    return res.status(400).json({
+      success: false,
+      msg: "'chatHistory' is required and must be an array.",
+    });
+  }
+
+  try {
+    // 🔹 Call Flask API
+    const response = await axios.post(`${process.env.FLASK_API_URL}/chat`, {
+      message,
+      chatHistory,
+    });
+
+    const botReply = response.data.response;
+
+    return res.status(200).json({
+      success: true,
+      msg: "Chat successful",
+      data: botReply,
+    });
+  } catch (error) {
+    console.error("Error calling Flask API:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      msg: "Failed to communicate with Flask service",
+    });
   }
 };
