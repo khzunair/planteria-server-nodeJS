@@ -105,11 +105,37 @@ const addProduct = async (req, res) => {
 };
 
 
+const getUserProducts = async (req, res) => {
+  try {
+    // Get the vendor ID from the authenticated request
+    const vendorId = req.vendor.id;
+    // console.log("Vendor ID:", vendorId);
+
+    // Fetch all products created by the specific vendor
+    const products = await Product.find({ vendor: vendorId })
+      .sort({ createdAt: -1 }) // Sort by most recent first
+      .populate('category', 'name') // Optionally populate category name
+      .select('-__v'); // Exclude version key
+
+    res.status(200).json({
+      success: true,
+      data: products,
+      totalProducts: products.length
+    });
+  } catch (err) {
+    console.error("Error fetching vendor products:", err.message);
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
+  }
+};
 // Get products by category
 const getProductsByCategory = async (req, res) => {
   try {
     const { category } = req.params;
-    console.log(category)
+    // console.log(category)
     const products = await Product.find({ category });
 
     if (!products.length) {
@@ -255,34 +281,68 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+// const getAllProducts = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 10, search = "" } = req.query;
+
+//     // Define search criteria (if any)
+//     const searchQuery = search
+//       ? {
+//           $or: [
+//             { name: { $regex: search, $options: "i" } }, // Case-insensitive name search
+//             { description: { $regex: search, $options: "i" } }, // Case-insensitive description search
+//           ],
+//         }
+//       : {};
+
+//     // Fetch products with pagination and search filter
+//     const products = await Product.find(searchQuery)
+//       .skip((page - 1) * limit)
+//       .limit(parseInt(limit));
+
+//     // Count total products for pagination info
+//     const totalProducts = await Product.countDocuments(searchQuery);
+
+//     res.status(200).json({
+//       success: true,
+//       data: products,
+//       totalProducts,
+//       totalPages: Math.ceil(totalProducts / limit),
+//       currentPage: parseInt(page),
+//     });
+//   } catch (err) {
+//     console.error("Error fetching products:", err.message);
+//     res.status(500).json({
+//       success: false,
+//       msg: "Server Error",
+//       errors: [{ msg: err.message, location: "server" }],
+//     });
+//   }
+// };
+
 const getAllProducts = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = "" } = req.query;
+    // Get the current date
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-    // Define search criteria (if any)
-    const searchQuery = search
-      ? {
-          $or: [
-            { name: { $regex: search, $options: "i" } }, // Case-insensitive name search
-            { description: { $regex: search, $options: "i" } }, // Case-insensitive description search
-          ],
-        }
-      : {};
+    // Create start and end dates for the current month
+    const startOfMonth = new Date(currentYear, currentMonth, 1);
+    const endOfMonth = new Date(currentYear, currentMonth + 1, 0);
 
-    // Fetch products with pagination and search filter
-    const products = await Product.find(searchQuery)
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
-
-    // Count total products for pagination info
-    const totalProducts = await Product.countDocuments(searchQuery);
+    // Fetch products created in the current month
+    const products = await Product.find({
+      createdAt: {
+        $gte: startOfMonth,
+        $lte: endOfMonth
+      }
+    });
 
     res.status(200).json({
       success: true,
       data: products,
-      totalProducts,
-      totalPages: Math.ceil(totalProducts / limit),
-      currentPage: parseInt(page),
+      totalProducts: products.length
     });
   } catch (err) {
     console.error("Error fetching products:", err.message);
@@ -293,6 +353,52 @@ const getAllProducts = async (req, res) => {
     });
   }
 };
+
+
+const searchProducts = async (req, res) => {
+  try {
+    const { query } = req.body;
+    console.log(req.body)
+    if (!query || query.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        msg: "Search query is required",
+        errors: [{ msg: "Search query is required", location: "body" }],
+      });
+    }
+
+  
+
+    // Create a regex pattern for case-insensitive search
+    const searchPattern = new RegExp(query, "i");
+
+    // Search in multiple fields: name, description, and tags
+    const products = await Product.find({
+      $or: [
+        { name: searchPattern },
+        { description: searchPattern },
+        { tags: { $in: [searchPattern] } },
+      ],
+    }).populate("category vendor");
+
+    res.status(200).json({
+      success: true,
+      data: products,
+      count: products.length,
+      query: query,
+    });
+  } catch (err) {
+    console.error("Error searching products:", err.message);
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
+  }
+};
+
+
+
 
 const getProductById = async (req, res) => {
   const { id } = req.params;
@@ -351,7 +457,57 @@ const getSixProductsByCategory = async (req, res) => {
 };
 
 
+const findProductByRecommendation = async (req, res) => {
+  try {
+    const { recommendation } = req.body;
 
+    if (!recommendation || recommendation.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        msg: "Product recommendation is required",
+        errors: [{ msg: "Product recommendation is required", location: "body" }],
+      });
+    }
+
+    // Create a regex pattern for partial match, case-insensitive
+    const searchPattern = new RegExp(recommendation, "i");
+
+    // First try to find an exact match in the name
+    let product = await Product.findOne({
+      name: searchPattern
+    }).populate("category vendor");
+
+    // If no exact match found, try to find a product that contains the recommendation
+    if (!product) {
+      product = await Product.findOne({
+        $or: [
+          { name: { $regex: searchPattern } },
+          { description: { $regex: searchPattern } },
+          { tags: { $in: [searchPattern] } },
+        ]
+      }).populate("category vendor");
+    }
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        msg: "No matching product found for the recommendation",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: product,
+    });
+  } catch (err) {
+    console.error("Error finding product by recommendation:", err.message);
+    res.status(500).json({
+      success: false,
+      msg: "Server Error",
+      errors: [{ msg: err.message, location: "server" }],
+    });
+  }
+}
 
 
 
@@ -363,5 +519,8 @@ module.exports = {
   deleteProduct,
   getProductsByCategory,
   getFeaturedProducts,
-  getSixProductsByCategory
+  getSixProductsByCategory,
+  getUserProducts,
+  searchProducts,
+  findProductByRecommendation
 };

@@ -17,6 +17,7 @@ exports.subscribeToPlan = async (req, res) => {
   try {
     const userId = req.user.id;
     const { planId } = req.params;
+    // console.log(req.params)
 
     const plan = await SubscriptionPlan.findById(planId);
     if (!plan || !plan.is_active) return res.status(404).json({ success: false, msg: "Plan not found" });

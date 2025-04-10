@@ -928,7 +928,8 @@ exports.updateOrderStatusVendor = async (req, res) => {
     const vendorId = req.vendor.id;  // The vendor ID from the auth token
     const { orderId } = req.params;
     const { status } = req.body;
-
+    // console.log(req.params)
+    // console.log(req.body)
     // Allowed order status updates
     const validStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
     if (!validStatuses.includes(status)) {

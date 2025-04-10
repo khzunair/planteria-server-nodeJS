@@ -9,8 +9,11 @@ const {
   getFeaturedProducts,
   getProductsByCategory,
   getSixProductsByCategory,
+  getUserProducts,
+  searchProducts
 } = require("../../controller/Products/ProductController");
 const vendorAuth = require("../../middleware/vendorAuth");
+const userAuth = require("../../middleware/userAuth");
 const { upload } = require("../../config/multer");
 
 
@@ -35,8 +38,13 @@ router.post(
 // Route to get all products
 router.get("/get-allproducts", getAllProducts);
 
+
+router.get("/get-allvendorproducts",vendorAuth, getUserProducts);
 // Route to get a product by ID
 router.get("/get-product/:id", getProductById);
+
+
+router.post("/searchproducts", searchProducts);
 
 // Route for vendors to update a product
 router.patch(
