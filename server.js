@@ -73,6 +73,7 @@ app.use("/api/use-ai-subscription", subscriptionRoutes);
 app.post("/create-payment-intent", async (req, res) => {
   try {
     const { amount, currency } = req.body;
+    console.log(req.body)
 
     if (!amount) {
       return res.status(400).json({ error: "Amount is required" });
