@@ -47,5 +47,9 @@ const sendOrderConfirmationEmail = async (to, subject, htmlContent) => {
   }
 };
 
-// Export both functions
-module.exports = { sendEmail, sendOrderConfirmationEmail };
+
+
+module.exports = {
+  sendEmail,
+  sendOrderConfirmationEmail,
+};

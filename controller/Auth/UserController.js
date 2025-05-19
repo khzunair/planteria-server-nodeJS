@@ -5,48 +5,56 @@ const { validationResult } = require("express-validator");
 const User = require("../../models/User");
 const Role = require("../../models/Role");
 const Otp = require("../../models/Otp");
-const sendEmail = require("../../utils/email");
+const { sendEmail } = require("../../utils/email");
+
 
 // Register User with OTP
-
 const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
 
+  // Validate input
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({
+      success: false,
+      msg: "Validation failed",
+      errors: errors.array(),
+    });
   }
 
   try {
-    // Check if the "user" role exists
+    // Check if "user" role exists
     const roleObj = await Role.findOne({ name: "user" });
     if (!roleObj) {
-      return res
-        .status(500)
-        .json({ errors: [{ msg: "Default user role not found" }] });
+      return res.status(500).json({
+        success: false,
+        errors: [{ msg: "Default user role not found" }],
+      });
     }
 
-    // Check if the email is already registered
+    // Check if email is already registered
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ errors: [{ msg: "Email already registered" }] });
+      return res.status(400).json({
+        success: false,
+        errors: [{ msg: "Email already registered" }],
+      });
     }
 
     // Check for existing active OTP
     const activeOtp = await Otp.findOne({
       email,
       status: "active",
-      expire_time: { $gt: new Date() }, // OTP is still valid
+      expire_time: { $gt: new Date() },
     });
 
     if (activeOtp) {
       const remainingTime =
-        (new Date(activeOtp.expire_time).getTime() - Date.now()) / 1000; // in seconds
-      const remainingMinutes = Math.ceil(remainingTime / 60); // in minutes
+        (new Date(activeOtp.expire_time).getTime() - Date.now()) / 1000;
+      const remainingMinutes = Math.ceil(remainingTime / 60);
 
       return res.status(429).json({
+        success: false,
         errors: [
           {
             msg: `An OTP has already been sent. Please wait ${
@@ -60,37 +68,49 @@ const registerUser = async (req, res) => {
     // Generate OTP
     const otpCode = Math.floor(10000 + Math.random() * 90000);
 
-    // Hash the password before saving
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create and save OTP entry
+    // Save OTP entry
     const otpEntry = new Otp({
       email,
       otp_code: otpCode,
       created_at: new Date(),
-      expire_time: new Date(Date.now() + 5 * 60 * 1000), // OTP expires in 5 minutes
+      expire_time: new Date(Date.now() + 5 * 60 * 1000), // 5 mins
       status: "active",
       temp_user_data: {
         name,
         email,
-        password: hashedPassword, // Save hashed password
+        password: hashedPassword,
         role: roleObj._id,
       },
     });
 
-    const savedOtpEntry = await otpEntry.save();
+    await otpEntry.save();
 
-    // Send OTP email
-    const subject = "Your Planteria OTP";
-    const text = `Hello ${name},\n\nYour OTP for completing registration is: ${otpCode}`;
-    await sendEmail(email, subject, text);
+    // Send email
+    try {
+      const subject = "Your Planteria OTP";
+      const text = `Hello ${name},\n\nYour OTP for completing registration is: ${otpCode}`;
+      await sendEmail(email, subject, text);
+    } catch (emailErr) {
+      console.error("Error sending email:", emailErr.message);
+      return res.status(500).json({
+        success: false,
+        errors: [{ msg: "Failed to send OTP email. Please try again later." }],
+      });
+    }
 
-    res.status(200).json({
+    return res.status(200).json({
+      success: true,
       msg: "OTP sent to email. Please verify to complete registration.",
     });
   } catch (err) {
-    //console.error("Error during registration:", err.message);
-    res.status(500).send("Server Error");
+    console.error("Registration error:", err.message);
+    return res.status(500).json({
+      success: false,
+      msg: "Server Error",
+    });
   }
 };
 
