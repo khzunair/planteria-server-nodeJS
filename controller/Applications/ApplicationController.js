@@ -1,6 +1,6 @@
 const { validationResult } = require("express-validator");
 const Application = require("../../models/Applications");
-const sendEmail = require("../../utils/email");
+const {sendEmail} = require("../../utils/email");
 const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 
@@ -11,6 +11,7 @@ const RegisteredVendor = require("../../models/RegisteredVendors");
 const createApplication = async (req, res) => {
   try {
     // Validate request body
+    console.log(req.body)
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ success: false, errors: errors.array() });
@@ -37,7 +38,7 @@ const createApplication = async (req, res) => {
       // Notify user that the email is already registered
       const subject = "Application Already Registered";
       const text = `Hello ${fullName},\n\nYour email is already registered for an application. Please check your details.`;
-      await sendEmail(email, subject, text);
+      // await sendEmail(email, subject, text);
 
       return res.status(400).json({
         success: false,
@@ -66,7 +67,7 @@ const createApplication = async (req, res) => {
     // Notify user of successful submission
     const subject = "Application Submitted Successfully";
     const text = `Hello ${fullName},\n\nYour application has been successfully submitted. We will review it shortly and get back to you.`;
-    await sendEmail(email, subject, text);
+    // await sendEmail(email, subject, text);
 
     return res.status(201).json({
       success: true,
@@ -179,6 +180,7 @@ const generateRandomPassword = () => {
 // <----------------------------Function to update application status (Approve/Reject)--------------------->
 const updateApplicationStatus = async (req, res) => {
   // Validate request body
+  console.log(req.body)
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ success: false, errors: errors.array() });
