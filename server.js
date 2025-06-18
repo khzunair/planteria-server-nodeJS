@@ -97,6 +97,9 @@ app.post("/create-payment-intent", async (req, res) => {
 });
 
 
+// Global error handler (after all routes)
+app.use(require('./middleware/errorHandler'));
+
 
 // app.use("/api/coupon", couponsRoutes);
 
