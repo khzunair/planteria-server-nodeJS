@@ -1,6 +1,5 @@
 const express = require("express");
-const { check } = require("express-validator");
-const sendEmail = require("../../utils/email");
+const sendEmail = require("../../../utils/email");
 const {
   registerUser,
   loginUser,
@@ -9,20 +8,15 @@ const {
   forgotPassword,
   verifyOtpAndResetPassword,
   changePassword,
-} = require("../../controller/Auth/UserController");
-const auth = require("../../middleware/userAuth");
+} = require("../../../controller/Auth/UserController");
+const auth = require("../../../middleware/userAuth");
+const { validateRegister, validateLogin } = require("../../../middleware/validators/userValidator");
 
 const router = express.Router();
 
 // Register
 router.post( "/register",
-  [
-    check("name", "Name is required").not().isEmpty(),
-    check("email", "Include a valid email").isEmail(),
-    check("password", "Password must be 6 or more characters").isLength({
-      min: 6,
-    }),
-  ],
+  validateRegister,
   registerUser
 );
 
@@ -31,10 +25,7 @@ router.post("/verify-otp", verifyOtpAndRegister);
 
 // Login
 router.post( "/login",
-  [
-    check("email", "Include a valid email").isEmail(),
-    check("password", "Password is required").exists(),
-  ],
+validateLogin,
   loginUser
 );
 

@@ -2,6 +2,11 @@ require("dotenv").config(); // Load .env variables
 const express = require("express");
 const bodyParser = require("body-parser");
 const ip = require("ip"); // Import IP module
+
+// Morgan Logger
+const morgan = require("morgan");
+const logger = require("./utils/logs/logger"); 
+
 // const errorHandler = require("./middleware/errorHandler");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); // Initialize Stripe
 
@@ -9,7 +14,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); // Initialize S
 const connectDB = require("./config/db");
 
 const cors = require("cors");
-const userRoutes = require("./routes/api/userRoutes");
+const userRoutes = require("./routes/api/v1/userRoutes");
 const adminRoutes = require("./routes/api/adminRoutes");
 const applicationsRoutes = require("./routes/api/applicationRoutes");
 const productCategoryRoutes = require("./routes/api/ProductCategoryRoute");
@@ -96,6 +101,12 @@ app.post("/create-payment-intent", async (req, res) => {
   }
 });
 
+
+app.use(morgan("combined", {
+  stream: {
+    write: (message) => logger.info(message.trim()),
+  },
+}));
 
 // Global error handler (after all routes)
 app.use(require('./middleware/errorHandler'));
