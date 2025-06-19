@@ -10,18 +10,19 @@ const {
   changePassword,
 } = require("../../../controller/Auth/UserController");
 const auth = require("../../../middleware/userAuth");
-const { validateRegister, validateLogin } = require("../../../middleware/validators/userValidator");
-
+const { validateRegister, validateLogin, validateOtp } = require("../../../middleware/validators/userValidator");
+const validate = require("../../../middleware/validators/validateHandler");
 const router = express.Router();
 
 // Register
 router.post( "/register",
   validateRegister,
+  validate, 
   registerUser
 );
 
 //VerifyOtp
-router.post("/verify-otp", verifyOtpAndRegister);
+router.post("/verify-otp", validateOtp, validate, verifyOtpAndRegister);
 
 // Login
 router.post( "/login",

@@ -7,16 +7,17 @@ const Role = require("../../models/Role");
 const Otp = require("../../models/Otp");
 const { sendEmail } = require("../../utils/email");
 const { successResponse, errorResponse } = require("../../utils/responseFormatter");
+const { verifyOtpEntry, createUserFromOtp } = require("../../services/otpService");
 
 // Register User with OTP
 const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
 
   // 🔍 1. Input validation
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return errorResponse(res, "Validation failed", errors.array(), 400);
-  }
+const errors = validationResult(req);
+if (!errors.isEmpty()) {
+  return errorResponse(res, "Validation failed", errors.array(), 400);
+}
 
   try {
     // 🔍 2. Check for 'user' role
@@ -89,76 +90,33 @@ const verifyOtpAndRegister = async (req, res) => {
   const { email, otp_code } = req.body;
 
   try {
-    // 🔍 Find active OTP
-    const otpEntry = await Otp.findOne({ email, otp_code, status: "active" });
+    const otp = await verifyOtpEntry(email, otp_code);
 
-    if (!otpEntry) {
-      return errorResponse(res, "Invalid or expired OTP", [
-        { msg: "Invalid or expired OTP" }
-      ], 400);
+    if (!otp.temp_user_data) {
+      return errorResponse(res, "No temporary user data found", [], 400);
     }
 
-    // ⌛ Check if OTP has expired
-    if (new Date() > otpEntry.expire_time) {
-      return errorResponse(res, "OTP expired", [
-        { msg: "OTP has expired" }
-      ], 400);
-    }
+    await createUserFromOtp(otp);
 
-    // ❌ Ensure temp user data exists
-    if (!otpEntry.temp_user_data) {
-      return errorResponse(res, "No user data", [
-        { msg: "No temporary user data found" }
-      ], 400);
-    }
+    otp.status = "inactive";
+    await otp.save();
+    await Otp.updateOne({ _id: otp._id }, { $unset: { temp_user_data: "" } });
 
-    const { name, password, role } = otpEntry.temp_user_data;
-
-    // 🔍 Check role
-    const roleObj = await Role.findById(role);
-    if (!roleObj) {
-      return errorResponse(res, "Invalid role", [
-        { msg: "Assigned role not found" }
-      ], 400);
-    }
-
-    // ✅ Create user
-    const user = new User({
-      name,
-      email,
-      password,
-      role: roleObj._id,
-      isActive: true
-    });
-
-    await user.save();
-
-    // ❌ Deactivate OTP and clear temp data
-    otpEntry.status = "inactive";
-    await otpEntry.save();
-    await Otp.updateOne(
-      { _id: otpEntry._id },
-      { $unset: { temp_user_data: "" } }
-    );
-
-    // 📧 Send welcome email
     try {
-      const subject = "Welcome to Planteria!";
-      const text = `Hello ${name},\n\nWelcome to Planteria! Your account has been successfully created.`;
-      await sendEmail(email, subject, text);
+      await sendEmail(
+        email,
+        "Welcome to Planteria!",
+        `Hello ${otp.temp_user_data.name},\n\nWelcome to Planteria!`
+      );
     } catch (emailErr) {
-      console.error("Error sending welcome email:", emailErr.message);
-      return errorResponse(res, "Email error", [
-        { msg: "Failed to send welcome email" }
-      ], 500);
+      console.error("Email error:", emailErr.message);
+      return errorResponse(res, "Email delivery failed", [], 500);
     }
 
-    // ✅ Success response
     return successResponse(res, "User registered successfully", {}, 201);
-
   } catch (err) {
-    console.error("verifyOtpAndRegister error:", err.message);
-    return errorResponse(res, "Server error", [{ msg: err.message }], 500);
+    console.error("OTP Verification Error:", err.message);
+    return errorResponse(res, "Failed to verify OTP", [{ msg: err.message }], 400);
   }
 };
 
