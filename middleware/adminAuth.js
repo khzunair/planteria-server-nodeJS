@@ -15,7 +15,8 @@ module.exports = async function (req, res, next) {
 
   try {
     // Verify token
-    const decoded = jwt.verify(token, config.get("jwtSecret"));
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
 
     // Find the admin using the ID from the token
     const admin = await Admin.findById(decoded.admin.id);

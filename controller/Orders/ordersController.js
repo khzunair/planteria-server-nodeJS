@@ -7,6 +7,7 @@ const Transaction = require("../../models/Transaction");
 const Review = require("../../models/Review");
 const { sendOrderConfirmationEmail } = require("../../utils/email");
 const crypto = require("crypto");
+const mongoose = require("mongoose")
 
 // Helper function: Generate Order Tracking ID
 const generateTrackingId = () => {
@@ -70,12 +71,15 @@ const generateOrderSummaryEmail = (order) => {
 };
 
 exports.createOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const userId = req.user.id;
     const {
       name,
       email,
-      phoneNumber, 
+      phoneNumber,
       address,
       province,
       paymentMethod = "COD",
@@ -84,6 +88,8 @@ exports.createOrder = async (req, res) => {
 
     // ✅ Validation
     if (!name || !email || !address || !province || !phoneNumber) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         success: false,
         msg: "Validation failed",
@@ -98,12 +104,19 @@ exports.createOrder = async (req, res) => {
     }
 
     if (!["COD", "CARD"].includes(paymentMethod)) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ success: false, msg: "Invalid payment method" });
     }
 
     // ✅ Fetch Cart
-    const cart = await Cart.findOne({ user: userId }).populate("items.product");
+    const cart = await Cart.findOne({ user: userId })
+      .populate("items.product")
+      .session(session);
+
     if (!cart || cart.items.length === 0) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ success: false, msg: "Cart is empty" });
     }
 
@@ -114,6 +127,8 @@ exports.createOrder = async (req, res) => {
     });
 
     if (vendors.size > 1) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({
         success: false,
         msg: "All products in the cart must be from the same vendor to place an order.",
@@ -125,12 +140,12 @@ exports.createOrder = async (req, res) => {
     let subtotal = 0;
 
     for (let item of cart.items) {
-      const product = await Product.findById(item.product._id);
+      const product = await Product.findById(item.product._id).session(session);
       if (!product || product.stock < item.quantity) continue;
 
       product.stock -= item.quantity;
       product.salesCount += item.quantity;
-      await product.save();
+      await product.save({ session });
 
       subtotal += item.quantity * product.price;
 
@@ -142,12 +157,18 @@ exports.createOrder = async (req, res) => {
     }
 
     if (updatedItems.length === 0) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ success: false, msg: "No valid products available for checkout" });
     }
 
     // ✅ Shipment Calculation
-    let shipmentPlan = await Shipment.findOne({ region: province }) || await Shipment.findOne({ region: "Other Regions" });
+    let shipmentPlan = await Shipment.findOne({ region: province }).session(session) 
+      || await Shipment.findOne({ region: "Other Regions" }).session(session);
+
     if (!shipmentPlan) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ success: false, msg: "No shipment plan available" });
     }
 
@@ -183,7 +204,7 @@ exports.createOrder = async (req, res) => {
       }
     });
 
-    await newOrder.save();
+    await newOrder.save({ session });
 
     // ✅ Create Transaction
     const platformFee = parseFloat((grandTotal * 0.20).toFixed(2));
@@ -200,10 +221,18 @@ exports.createOrder = async (req, res) => {
       message,
     });
 
-    await newTransaction.save();
+    await newTransaction.save({ session });
 
     // ✅ Empty Cart
-    await Cart.updateOne({ user: userId }, { $set: { items: [], totalAmount: 0 } });
+    await Cart.updateOne(
+      { user: userId },
+      { $set: { items: [], totalAmount: 0 } },
+      { session }
+    );
+
+    // ✅ Commit the transaction
+    await session.commitTransaction();
+    session.endSession();
 
     // ✅ Send Email to User
     await newOrder.populate("orderSummary.items.product");
@@ -243,6 +272,8 @@ exports.createOrder = async (req, res) => {
     });
 
   } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
     console.error("❌ Error creating order:", error);
     res.status(500).json({
       success: false,
@@ -251,6 +282,7 @@ exports.createOrder = async (req, res) => {
     });
   }
 };
+
 
 
 exports.updateOrderStatus = async (req, res) => {
@@ -368,7 +400,7 @@ const generateOrderStatusEmail = (order) => {
 exports.getOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
-    
+
     // Find order and populate products
     const order = await Order.findById(orderId)
       .populate("orderSummary.items.product", "name") // Only fetch product names

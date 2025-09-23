@@ -37,6 +37,10 @@ const userSchema = new mongoose.Schema(
       ref: "Subscription",
       default: null,
     },
+    refreshToken: {
+      type: String,
+      default: "",
+    },
     remainingChats: { type: Number, default: 0 },
   },
   { timestamps: true }
@@ -61,4 +65,4 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model("User", userSchema);  

@@ -98,7 +98,8 @@ const loginAdmin = async (req, res) => {
 
     const payload = { admin: { id: admin.id, role: "admin" } };
 
-    jwt.sign(payload, config.get("jwtSecret"), { expiresIn: "10h" }, (err, token) => {
+jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "10h" }, (err, token) => {
+
       if (err) throw err;
       res.json({
         success: true,

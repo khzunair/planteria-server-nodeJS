@@ -1,11 +1,12 @@
 const express = require("express");
 const router = express.Router();
 
-const  userAuth  = require("../../middleware/userAuth");
-const  adminAuth  = require("../../middleware/adminAuth");
-const  vendorAuth  = require("../../middleware/vendorAuth");
+const userAuth = require("../../middleware/userAuth");
+const adminAuth = require("../../middleware/adminAuth");
+const vendorAuth = require("../../middleware/vendorAuth");
 
-const { createOrder, getUserOrders, updateOrderStatus, getOrderStatus, getOrderById, getTotalOrders, getSubmittedOrders, getCurrentOrders, getAllOrders, getOrdersByStatus, getOrderByIdAdmin, getAllOrdersVendor, getAllOrdersVendorForAdmin, getOrderByIdVendor, getOrdersByStatusVendor, updateOrderStatusVendor } = require("../../controller/Orders/OrdersController");
+const { createOrder, getUserOrders, updateOrderStatus, getOrderStatus, getOrderById, getTotalOrders, getSubmittedOrders, getCurrentOrders, getAllOrders, getOrdersByStatus, getOrderByIdAdmin, getAllOrdersVendor, getAllOrdersVendorForAdmin, getOrderByIdVendor, getOrdersByStatusVendor
+    , updateOrderStatusVendor } = require("../../controller/Orders/OrdersController");
 
 // ✅ Create Order (Only Users)  
 router.post("/create", userAuth, createOrder);

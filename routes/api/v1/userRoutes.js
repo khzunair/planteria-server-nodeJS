@@ -8,6 +8,8 @@ const {
   forgotPassword,
   verifyOtpAndResetPassword,
   changePassword,
+  logoutUser,
+  refreshTokens,
 } = require("../../../controller/Auth/UserController");
 const auth = require("../../../middleware/userAuth");
 const { validateRegister, validateLogin, validateOtp } = require("../../../middleware/validators/userValidator");
@@ -29,6 +31,13 @@ router.post( "/login",
 validateLogin,
   loginUser
 );
+
+// Logout
+router.post('/logout', logoutUser);
+
+// Refresh Token
+router.post('/refresh-token', refreshTokens);
+
 
 // Test Email Route
 router.get("/test-email", async (req, res) => {

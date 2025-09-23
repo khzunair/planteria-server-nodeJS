@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const config = require("config");
+
 const RegisteredVendor = require("../models/RegisteredVendors");
 
 module.exports = async function (req, res, next) {
@@ -15,7 +15,7 @@ module.exports = async function (req, res, next) {
 
   try {
     // Verify token
-    const decoded = jwt.verify(token, config.get("jwtSecret"));
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Find the vendor using the ID from the token
     const vendor = await RegisteredVendor.findById(decoded.vendor.id);

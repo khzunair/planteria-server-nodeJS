@@ -1,19 +1,55 @@
-require("dotenv").config(); // Load .env variables
+require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const ip = require("ip"); // Import IP module
+const cookieParser = require('cookie-parser');
+const cors = require("cors");
 
 // Morgan Logger
 const morgan = require("morgan");
 const logger = require("./utils/logs/logger"); 
 
-// const errorHandler = require("./middleware/errorHandler");
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); // Initialize Stripe
-
 // Connect Application to Database
 const connectDB = require("./config/db");
 
-const cors = require("cors");
+
+const app = express();
+const whitelist = ['http://localhost:5173', 'http://192.168.100.8:5173'];
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (whitelist.indexOf(origin) !== -1 || !origin) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+
+app.use(cookieParser());
+app.use(cors(corsOptions));
+
+app.use(morgan("combined", {
+  stream: {
+    write: (message) => logger.info(message.trim()),
+  },
+}));
+// init middleware
+// to get data in request.body
+app.use(express.json({ extended: false }));
+
+// app.use(errorHandler);
+app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
+app.use(bodyParser.json({ limit: "10mb" })); // to support JSON-encoded bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+// const errorHandler = require("./middleware/errorHandler");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY); // Initialize Stripe
+
+
+
 const userRoutes = require("./routes/api/v1/userRoutes");
 const adminRoutes = require("./routes/api/adminRoutes");
 const applicationsRoutes = require("./routes/api/applicationRoutes");
@@ -31,14 +67,14 @@ const orderRoutes = require("./routes/api/orderRoutes");
 const reviewRoutes = require("./routes/api/reviewRoutes");
 const transactionRoutes = require("./routes/api/transactionRoutes");
 const vendorBalanceRoutes = require("./routes/api/vendorBalance");
+const analyticsRoutes = require("./routes/api/analyticsRoutes");
 // const couponsRoutes = require("./routes/api/couponsRoutes");
 
-const app = express();
 
-// app.use(errorHandler);
-app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
-app.use(bodyParser.json({ limit: "10mb" })); // to support JSON-encoded bodies
-app.use(express.json({ extended: false }));
+
+
+
+
 
 // for Production
 const path = require("path");
@@ -46,10 +82,8 @@ const path = require("path");
 // Connect Database
 connectDB();
 
-app.use(cors());
-// init middleware
-// to get data in request.body
-app.use(express.json({ extended: false }));
+
+
 
 // ******* Routes *******
 
@@ -72,6 +106,7 @@ app.use("/api/vendor-account", vendorAccountRoutes);
 app.use("/api/transaction", transactionRoutes);
 app.use("/api/balance", vendorBalanceRoutes);
 app.use("/api/use-ai-subscription", subscriptionRoutes);
+app.use("/api/analyticsRoutes", analyticsRoutes);
 
 
 // Stripe Payment Intent API
@@ -102,11 +137,7 @@ app.post("/create-payment-intent", async (req, res) => {
 });
 
 
-app.use(morgan("combined", {
-  stream: {
-    write: (message) => logger.info(message.trim()),
-  },
-}));
+
 
 // Global error handler (after all routes)
 app.use(require('./middleware/errorHandler'));

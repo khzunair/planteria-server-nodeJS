@@ -10,7 +10,8 @@ const {
   getProductsByCategory,
   getSixProductsByCategory,
   getUserProducts,
-  searchProducts
+  searchProducts,
+  searchProductByName
 } = require("../../controller/Products/ProductController");
 const vendorAuth = require("../../middleware/vendorAuth");
 const userAuth = require("../../middleware/userAuth");
@@ -35,6 +36,8 @@ router.post(
   addProduct
 );
 
+router.get("/search/without-index/:productName", searchProductByName)
+
 // Route to get all products
 router.get("/get-allproducts", getAllProducts);
 
@@ -45,6 +48,8 @@ router.get("/get-product/:id", getProductById);
 
 
 router.post("/searchproducts", searchProducts);
+
+
 
 // Route for vendors to update a product
 router.patch(

@@ -33,4 +33,11 @@ const ProductSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Create a compound index for fast searches by name and category
+ProductSchema.index({ name: 1, category: 1 });
+
+// Optionally, create a text index for full-text search capabilities
+ProductSchema.index({ name: 'text', description: 'text', tags: 'text' }); 
+
 module.exports = mongoose.model("Product", ProductSchema);
+  

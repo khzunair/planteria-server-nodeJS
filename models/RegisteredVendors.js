@@ -30,3 +30,4 @@ const RegisteredVendorSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("RegisteredVendors", RegisteredVendorSchema);
+   

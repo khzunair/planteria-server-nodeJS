@@ -1,6 +1,5 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const config = require("config");
 const { validationResult } = require("express-validator");
 const User = require("../../models/User");
 const Role = require("../../models/Role");
@@ -9,30 +8,26 @@ const { sendEmail } = require("../../utils/email");
 const { successResponse, errorResponse } = require("../../utils/responseFormatter");
 const { verifyOtpEntry, createUserFromOtp } = require("../../services/otpService");
 
-// Register User with OTP
+
 const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
 
-  // 🔍 1. Input validation
-const errors = validationResult(req);
-if (!errors.isEmpty()) {
-  return errorResponse(res, "Validation failed", errors.array(), 400);
-}
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return errorResponse(res, "Validation failed", errors.array(), 400);
+  }
 
   try {
-    // 🔍 2. Check for 'user' role
     const roleObj = await Role.findOne({ name: "user" });
     if (!roleObj) {
       return errorResponse(res, "Role setup error", [{ msg: "Default user role not found" }], 500);
     }
 
-    // 🔍 3. Check for duplicate email
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return errorResponse(res, "Duplicate email", [{ msg: "Email already registered" }], 400);
     }
 
-    // 🔍 4. Check for active OTP
     const activeOtp = await Otp.findOne({
       email,
       status: "active",
@@ -48,7 +43,6 @@ if (!errors.isEmpty()) {
       ], 429);
     }
 
-    // 🔐 5. Create OTP and hash password
     const otpCode = Math.floor(10000 + Math.random() * 90000);
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -68,15 +62,13 @@ if (!errors.isEmpty()) {
 
     await otpEntry.save();
 
-    // 📧 6. Send Email
     try {
-      await sendEmail(email, "Your Planteria OTP", `Hello ${name},\n\nYour OTP is: ${otpCode}`);
+      await sendEmail(email, "Your OTP for Registration!", `Hello ${name},\n\nYour OTP is: ${otpCode}`);
     } catch (emailErr) {
       console.error("Email error:", emailErr.message);
       return errorResponse(res, "Email delivery failed", [{ msg: "Failed to send OTP email" }], 500);
     }
 
-    // 🎉 7. Success response
     return successResponse(res, "OTP sent to email. Please verify to complete registration.");
   } catch (err) {
     console.error("Registration error:", err.message);
@@ -85,7 +77,6 @@ if (!errors.isEmpty()) {
 };
 
 
-// verifyOtp And Registered
 const verifyOtpAndRegister = async (req, res) => {
   const { email, otp_code } = req.body;
 
@@ -105,8 +96,8 @@ const verifyOtpAndRegister = async (req, res) => {
     try {
       await sendEmail(
         email,
-        "Welcome to Planteria!",
-        `Hello ${otp.temp_user_data.name},\n\nWelcome to Planteria!`
+        "Welcome!",
+        `Hello ${otp.temp_user_data.name},\n\nWelcome!`
       );
     } catch (emailErr) {
       console.error("Email error:", emailErr.message);
@@ -124,13 +115,13 @@ const verifyOtpAndRegister = async (req, res) => {
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
-  // 🔍 1. Input Validation
+
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return errorResponse(res, "Validation failed", errors.array(), 400);
   }
 
-  // 🔍 2. Custom Field Checks
+
   if (!email || !password) {
     return errorResponse(res, "Missing fields", [
       {
@@ -140,7 +131,6 @@ const loginUser = async (req, res) => {
     ], 400);
   }
 
-  // 🔍 3. Email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
     return errorResponse(res, "Invalid email format", [
@@ -148,7 +138,7 @@ const loginUser = async (req, res) => {
     ], 400);
   }
 
-  // 🔍 4. Password length
+
   if (password.length < 6) {
     return errorResponse(res, "Weak password", [
       { field: "password", msg: "Password must be at least 6 characters long" }
@@ -156,7 +146,6 @@ const loginUser = async (req, res) => {
   }
 
   try {
-    // 🔍 5. Find user by email
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -171,7 +160,6 @@ const loginUser = async (req, res) => {
       ], 403);
     }
 
-    // 🔐 6. Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return errorResponse(res, "Invalid credentials", [
@@ -179,7 +167,6 @@ const loginUser = async (req, res) => {
       ], 400);
     }
 
-    // 🔐 7. Generate JWT token
     const payload = {
       user: {
         id: user.id,
@@ -187,28 +174,89 @@ const loginUser = async (req, res) => {
       },
     };
 
-    jwt.sign(payload, config.get("jwtSecret"), { expiresIn: "10h" }, (err, token) => {
-      if (err) {
-        console.error("JWT generation error:", err.message);
-        return errorResponse(res, "Token generation failed", [{ msg: err.message }], 500);
-      }
 
-      // ✅ Success response
-      return successResponse(res, "User login successful", {
-        token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: "user",
-        },
-      });
+    const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "15m" });
+
+    const refreshToken = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET, { expiresIn: "7d" });
+
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true, 
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict', 
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+
+    return successResponse(res, "User login successful", {
+      accessToken, 
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: "user",
+      },
     });
 
   } catch (err) {
     console.error("Login error:", err.message);
     return errorResponse(res, "Server Error", [{ msg: err.message }], 500);
   }
+};
+
+
+const logoutUser = async (req, res) => {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+        return successResponse(res, "Logout successful.", {});
+    }
+
+    try {
+        const user = await User.findOne({ refreshToken });
+
+        if (user) {
+            user.refreshToken = "";
+            await user.save();
+        }
+        res.clearCookie('refreshToken');
+
+        return successResponse(res, "Logout successful.", {});
+    } catch (err) {
+        console.error("Logout error:", err.message);
+        return errorResponse(res, "Server Error", [{ msg: err.message }], 500);
+    }
+};
+
+
+const refreshTokens = async (req, res) => {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+        return errorResponse(res, "Authorization Denied", [{ msg: "Refresh token is missing." }], 401);
+    }
+
+    try {
+        const user = await User.findOne({ refreshToken });
+        if (!user) {
+            return errorResponse(res, "Authorization Denied", [{ msg: "Invalid refresh token." }], 403);
+        }
+
+        const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+
+        // 3. Generate a new access token
+        const payload = { user: { id: user.id } };
+        const newAccessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "15m" });
+
+        // 4. Send the new access token back
+        return successResponse(res, "Token refreshed.", { accessToken: newAccessToken });
+    } catch (err) {
+        // Token is invalid or expired
+        return errorResponse(res, "Authorization Denied", [{ msg: "Invalid or expired refresh token." }], 403);
+    }
 };
 
 //Get User Details
@@ -365,4 +413,6 @@ module.exports = {
   forgotPassword,
   verifyOtpAndResetPassword,
   changePassword,
+  logoutUser,
+  refreshTokens
 };

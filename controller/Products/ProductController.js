@@ -7,6 +7,25 @@ const Review = require("../../models/Review");
 const mongoose = require("mongoose");
 const ProductCategory = require("../../models/ProductCategory");
 
+const searchProductByName = async (req, res) => {
+  const { productName } = req.params;
+    console.time('SearchWithoutIndex'); // Start the timer
+
+    try {
+        const product = await Product.findOne({ name: productName });
+        console.timeEnd('SearchWithoutIndex'); // End the timer
+
+
+        if (!product) {
+            return res.status(404).json({ message: 'Product not found.' });
+        }
+        res.status(200).json(product);
+    } catch (error) {
+        console.error('Error during search:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+
+};
 
 const addProduct = async (req, res) => {
   try {
@@ -336,8 +355,8 @@ const getAllProducts = async (req, res) => {
       createdAt: {
         $gte: startOfMonth,
         $lte: endOfMonth
-      }
-    });
+      },
+    })
 
     res.status(200).json({
       success: true,
@@ -522,5 +541,6 @@ module.exports = {
   getSixProductsByCategory,
   getUserProducts,
   searchProducts,
-  findProductByRecommendation
+  findProductByRecommendation,
+  searchProductByName
 };
